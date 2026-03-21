@@ -25,6 +25,8 @@ type RedisLike = {
   llen(key: string): Promise<number>;
   del(...keys: string[]): Promise<number>;
   rpush(key: string, ...values: string[]): Promise<number>;
+  lpush(key: string, ...values: string[]): Promise<number>;
+  ltrim(key: string, start: number, stop: number): Promise<unknown>;
   sadd(key: string, ...members: string[]): Promise<number>;
   smembers(key: string): Promise<string[]>;
   mget(...keys: string[]): Promise<Array<string | null>>;
@@ -47,7 +49,8 @@ const itemSchema = z.object({
 });
 
 const revisionMetaSchema = z.object({
-  revisionId: z.string().min(1)
+  revisionId: z.string().min(1),
+  createdAt: z.string().datetime()
 });
 
 const categorySummarySchema = z.array(
@@ -61,12 +64,28 @@ const categorySummarySchema = z.array(
 export class RedisCatalogRevisionStore implements CatalogRevisionStorePort {
   public constructor(
     private readonly redis: RedisLike,
-    private readonly keyPrefix: string
+    private readonly keyPrefix: string,
+    private readonly retainedRevisionCount = 2
   ) {}
 
   public async hasActiveRevision(tenantId: TenantId, playlistId: PlaylistId): Promise<boolean> {
     const activeRevision = await this.redis.get(this.activeKey(tenantId, playlistId));
     return activeRevision !== null;
+  }
+
+  public async getActiveRevisionInfo(
+    tenantId: TenantId,
+    playlistId: PlaylistId
+  ): Promise<{ revisionId: ReturnType<typeof asRevisionId>; createdAt: string } | null> {
+    const revisionContext = await this.getRevisionContext(tenantId, playlistId);
+    if (revisionContext === null) {
+      return null;
+    }
+
+    return {
+      revisionId: revisionContext.revisionId,
+      createdAt: revisionContext.createdAt
+    };
   }
 
   public async activateRevision(snapshot: CatalogRevisionSnapshot): Promise<void> {
@@ -78,8 +97,14 @@ export class RedisCatalogRevisionStore implements CatalogRevisionStorePort {
       snapshot.playlistId,
       snapshot.revisionId
     );
+    const tokenCatalogKey = this.tokenCatalogKey(
+      snapshot.tenantId,
+      snapshot.playlistId,
+      snapshot.revisionId
+    );
+    const historyKey = this.historyKey(snapshot.tenantId, snapshot.playlistId);
 
-    await this.redis.del(orderKey, metaKey, categoriesKey);
+    await this.redis.del(orderKey, metaKey, categoriesKey, tokenCatalogKey);
 
     if (snapshot.items.length > 0) {
       await this.redis.rpush(orderKey, ...snapshot.items.map((item) => item.itemId));
@@ -117,6 +142,11 @@ export class RedisCatalogRevisionStore implements CatalogRevisionStorePort {
       }
     }
 
+    const tokenCatalog = [...tokenIndex.keys()];
+    if (tokenCatalog.length > 0) {
+      await this.redis.rpush(tokenCatalogKey, ...tokenCatalog);
+    }
+
     for (const [token, itemIds] of tokenIndex.entries()) {
       await this.redis.sadd(
         this.searchTokenKey(snapshot.tenantId, snapshot.playlistId, snapshot.revisionId, token),
@@ -129,8 +159,16 @@ export class RedisCatalogRevisionStore implements CatalogRevisionStorePort {
     );
 
     await this.redis.set(categoriesKey, JSON.stringify(categories));
-    await this.redis.set(metaKey, JSON.stringify({ revisionId: snapshot.revisionId }));
+    await this.redis.set(metaKey, JSON.stringify({ revisionId: snapshot.revisionId, createdAt: snapshot.createdAt }));
     await this.redis.set(activeKey, snapshot.revisionId);
+    await this.redis.lpush(historyKey, snapshot.revisionId);
+
+    const prunedRevisionIds = await this.redis.lrange(historyKey, this.retainedRevisionCount, -1);
+    await this.redis.ltrim(historyKey, 0, this.retainedRevisionCount - 1);
+
+    for (const revisionId of prunedRevisionIds) {
+      await this.deleteRevision(snapshot.tenantId, snapshot.playlistId, revisionId);
+    }
   }
 
   public async getPaginatedItems(
@@ -139,27 +177,39 @@ export class RedisCatalogRevisionStore implements CatalogRevisionStorePort {
     page: number,
     pageSize: number
   ): Promise<PaginatedItemsPage | null> {
-    const revisionContext = await this.getRevisionContext(tenantId, playlistId);
-    if (revisionContext === null) {
-      return null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const revisionContext = await this.getRevisionContext(tenantId, playlistId);
+      if (revisionContext === null) {
+        return null;
+      }
+
+      const start = (page - 1) * pageSize;
+      const stop = start + pageSize - 1;
+      const [itemIds, total] = await Promise.all([
+        this.redis.lrange(revisionContext.orderKey, start, stop),
+        this.redis.llen(revisionContext.orderKey)
+      ]);
+      const items = await this.getItemsByIds(
+        tenantId,
+        playlistId,
+        revisionContext.revisionId,
+        itemIds
+      );
+      if (items === null) {
+        continue;
+      }
+
+      return {
+        items,
+        page,
+        pageSize,
+        total,
+        hasMore: start + items.length < total,
+        revisionId: revisionContext.revisionId
+      };
     }
 
-    const start = (page - 1) * pageSize;
-    const stop = start + pageSize - 1;
-    const [itemIds, total] = await Promise.all([
-      this.redis.lrange(revisionContext.orderKey, start, stop),
-      this.redis.llen(revisionContext.orderKey)
-    ]);
-    const items = await this.getItemsByIds(tenantId, playlistId, revisionContext.revisionId, itemIds);
-
-    return {
-      items,
-      page,
-      pageSize,
-      total,
-      hasMore: start + items.length < total,
-      revisionId: revisionContext.revisionId
-    };
+    return null;
   }
 
   public async searchItems(
@@ -169,82 +219,97 @@ export class RedisCatalogRevisionStore implements CatalogRevisionStorePort {
     page: number,
     pageSize: number
   ): Promise<SearchItemsPage | null> {
-    const revisionContext = await this.getRevisionContext(tenantId, playlistId);
-    if (revisionContext === null) {
-      return null;
-    }
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const revisionContext = await this.getRevisionContext(tenantId, playlistId);
+      if (revisionContext === null) {
+        return null;
+      }
 
-    const tokens = tokenizeSearchText(query);
-    if (tokens.length === 0) {
-      return {
-        items: [],
-        page,
-        pageSize,
-        total: 0,
-        hasMore: false,
-        revisionId: revisionContext.revisionId,
-        query
-      };
-    }
+      const tokens = tokenizeSearchText(query);
+      if (tokens.length === 0) {
+        return {
+          items: [],
+          page,
+          pageSize,
+          total: 0,
+          hasMore: false,
+          revisionId: revisionContext.revisionId,
+          query
+        };
+      }
 
-    const tokenMembers = await Promise.all(
-      tokens.map((token) =>
-        this.redis.smembers(
-          this.searchTokenKey(tenantId, playlistId, revisionContext.revisionId, token)
+      const tokenMembers = await Promise.all(
+        tokens.map((token) =>
+          this.redis.smembers(
+            this.searchTokenKey(tenantId, playlistId, revisionContext.revisionId, token)
+          )
         )
-      )
-    );
+      );
 
-    if (tokenMembers.some((members) => members.length === 0)) {
+      if (tokenMembers.some((members) => members.length === 0)) {
+        return {
+          items: [],
+          page,
+          pageSize,
+          total: 0,
+          hasMore: false,
+          revisionId: revisionContext.revisionId,
+          query
+        };
+      }
+
+      const matchedItemIds = this.intersectIds(tokenMembers);
+      const items = await this.getItemsByIds(
+        tenantId,
+        playlistId,
+        revisionContext.revisionId,
+        matchedItemIds
+      );
+      if (items === null) {
+        continue;
+      }
+
+      const sortedItems = [...items].sort((left, right) => left.title.localeCompare(right.title));
+      const start = (page - 1) * pageSize;
+      const paginatedItems = sortedItems.slice(start, start + pageSize);
+
       return {
-        items: [],
+        items: paginatedItems,
         page,
         pageSize,
-        total: 0,
-        hasMore: false,
+        total: sortedItems.length,
+        hasMore: start + paginatedItems.length < sortedItems.length,
         revisionId: revisionContext.revisionId,
         query
       };
     }
 
-    const matchedItemIds = this.intersectIds(tokenMembers);
-    const items = await this.getItemsByIds(
-      tenantId,
-      playlistId,
-      revisionContext.revisionId,
-      matchedItemIds
-    );
-    const sortedItems = [...items].sort((left, right) => left.title.localeCompare(right.title));
-
-    const start = (page - 1) * pageSize;
-    const paginatedItems = sortedItems.slice(start, start + pageSize);
-
-    return {
-      items: paginatedItems,
-      page,
-      pageSize,
-      total: sortedItems.length,
-      hasMore: start + paginatedItems.length < sortedItems.length,
-      revisionId: revisionContext.revisionId,
-      query
-    };
+    return null;
   }
 
   public async getCategorySummaries(
     tenantId: TenantId,
     playlistId: PlaylistId
   ): Promise<readonly CategorySummary[] | null> {
-    const revisionContext = await this.getRevisionContext(tenantId, playlistId);
-    if (revisionContext === null) {
-      return null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const revisionContext = await this.getRevisionContext(tenantId, playlistId);
+      if (revisionContext === null) {
+        return null;
+      }
+
+      const serializedCategories = await this.redis.get(revisionContext.categoriesKey);
+      if (serializedCategories === null) {
+        return [];
+      }
+
+      try {
+        return categorySummarySchema.parse(JSON.parse(serializedCategories));
+      } catch {
+        await this.handleCorruptedRevision(tenantId, playlistId, revisionContext.revisionId);
+      }
     }
 
-    const serializedCategories = await this.redis.get(revisionContext.categoriesKey);
-    if (serializedCategories === null) {
-      return [];
-    }
-
-    return categorySummarySchema.parse(JSON.parse(serializedCategories));
+    return null;
   }
 
   public async getItem(
@@ -252,19 +317,53 @@ export class RedisCatalogRevisionStore implements CatalogRevisionStorePort {
     playlistId: PlaylistId,
     itemId: ItemId
   ): Promise<NormalizedItemSummary | null> {
-    const revisionContext = await this.getRevisionContext(tenantId, playlistId);
-    if (revisionContext === null) {
-      return null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const revisionContext = await this.getRevisionContext(tenantId, playlistId);
+      if (revisionContext === null) {
+        return null;
+      }
+
+      const serializedItem = await this.redis.get(
+        this.itemKey(tenantId, playlistId, revisionContext.revisionId, itemId)
+      );
+      if (serializedItem === null) {
+        return null;
+      }
+
+      try {
+        return this.parseItem(serializedItem);
+      } catch {
+        await this.handleCorruptedRevision(tenantId, playlistId, revisionContext.revisionId);
+      }
     }
 
-    const serializedItem = await this.redis.get(
-      this.itemKey(tenantId, playlistId, revisionContext.revisionId, itemId)
-    );
-    if (serializedItem === null) {
-      return null;
-    }
+    return null;
+  }
 
-    return this.parseItem(serializedItem);
+  private async deleteRevision(
+    tenantId: TenantId,
+    playlistId: PlaylistId,
+    revisionId: string
+  ): Promise<void> {
+    const orderKey = this.orderKey(tenantId, playlistId, revisionId);
+    const tokenCatalogKey = this.tokenCatalogKey(tenantId, playlistId, revisionId);
+    const [itemIds, tokens] = await Promise.all([
+      this.redis.lrange(orderKey, 0, -1),
+      this.redis.lrange(tokenCatalogKey, 0, -1)
+    ]);
+
+    const keys = [
+      orderKey,
+      this.metaKey(tenantId, playlistId, revisionId),
+      this.categoriesKey(tenantId, playlistId, revisionId),
+      tokenCatalogKey,
+      ...itemIds.map((itemId) => this.itemKey(tenantId, playlistId, revisionId, itemId)),
+      ...tokens.map((token) => this.searchTokenKey(tenantId, playlistId, revisionId, token))
+    ];
+
+    if (keys.length > 0) {
+      await this.redis.del(...keys);
+    }
   }
 
   private async getRevisionContext(
@@ -273,12 +372,14 @@ export class RedisCatalogRevisionStore implements CatalogRevisionStorePort {
   ): Promise<
     | {
         revisionId: ReturnType<typeof asRevisionId>;
+        createdAt: string;
         orderKey: string;
         categoriesKey: string;
       }
     | null
   > {
-    const activeRevision = await this.redis.get(this.activeKey(tenantId, playlistId));
+    const activeKey = this.activeKey(tenantId, playlistId);
+    const activeRevision = await this.redis.get(activeKey);
     if (activeRevision === null) {
       return null;
     }
@@ -287,13 +388,21 @@ export class RedisCatalogRevisionStore implements CatalogRevisionStorePort {
     const metaKey = this.metaKey(tenantId, playlistId, revisionId);
     const serializedMeta = await this.redis.get(metaKey);
     if (serializedMeta === null) {
+      await this.handleCorruptedRevision(tenantId, playlistId, revisionId);
       return null;
     }
 
-    revisionMetaSchema.parse(JSON.parse(serializedMeta));
+    let parsedMeta: z.infer<typeof revisionMetaSchema>;
+    try {
+      parsedMeta = revisionMetaSchema.parse(JSON.parse(serializedMeta));
+    } catch {
+      await this.handleCorruptedRevision(tenantId, playlistId, revisionId);
+      return null;
+    }
 
     return {
       revisionId,
+      createdAt: parsedMeta.createdAt,
       orderKey: this.orderKey(tenantId, playlistId, revisionId),
       categoriesKey: this.categoriesKey(tenantId, playlistId, revisionId)
     };
@@ -304,7 +413,7 @@ export class RedisCatalogRevisionStore implements CatalogRevisionStorePort {
     playlistId: PlaylistId,
     revisionId: ReturnType<typeof asRevisionId>,
     itemIds: readonly string[]
-  ): Promise<readonly NormalizedItemSummary[]> {
+  ): Promise<readonly NormalizedItemSummary[] | null> {
     if (itemIds.length === 0) {
       return [];
     }
@@ -313,9 +422,106 @@ export class RedisCatalogRevisionStore implements CatalogRevisionStorePort {
       ...itemIds.map((itemId) => this.itemKey(tenantId, playlistId, revisionId, itemId))
     );
 
-    return serializedItems
-      .filter((item): item is string => item !== null)
-      .map((item) => this.parseItem(item));
+    if (serializedItems.some((item) => item === null)) {
+      await this.handleCorruptedRevision(tenantId, playlistId, revisionId);
+      return null;
+    }
+
+    try {
+      return serializedItems
+        .filter((item): item is string => item !== null)
+        .map((item) => this.parseItem(item));
+    } catch {
+      await this.handleCorruptedRevision(tenantId, playlistId, revisionId);
+      return null;
+    }
+  }
+
+  private async handleCorruptedRevision(
+    tenantId: TenantId,
+    playlistId: PlaylistId,
+    corruptedRevisionId: ReturnType<typeof asRevisionId>
+  ): Promise<void> {
+    const activeKey = this.activeKey(tenantId, playlistId);
+    const historyKey = this.historyKey(tenantId, playlistId);
+    const history = await this.redis.lrange(historyKey, 0, -1);
+    const candidateRevisionIds = history.filter((revisionId) => revisionId !== corruptedRevisionId);
+
+    await this.deleteRevision(tenantId, playlistId, corruptedRevisionId);
+
+    const healthyRevisionIds: string[] = [];
+    let promotedRevisionId: string | null = null;
+
+    for (const candidateRevisionId of candidateRevisionIds) {
+      if (await this.isRevisionUsable(tenantId, playlistId, candidateRevisionId)) {
+        healthyRevisionIds.push(candidateRevisionId);
+        if (promotedRevisionId === null) {
+          promotedRevisionId = candidateRevisionId;
+        }
+      } else {
+        await this.deleteRevision(tenantId, playlistId, candidateRevisionId);
+      }
+    }
+
+    await this.writeHistory(historyKey, healthyRevisionIds.slice(0, this.retainedRevisionCount));
+
+    if (promotedRevisionId === null) {
+      await this.redis.del(activeKey);
+      return;
+    }
+
+    await this.redis.set(activeKey, promotedRevisionId);
+  }
+
+  private async isRevisionUsable(
+    tenantId: TenantId,
+    playlistId: PlaylistId,
+    revisionId: string
+  ): Promise<boolean> {
+    const [serializedMeta, serializedCategories, itemIds] = await Promise.all([
+      this.redis.get(this.metaKey(tenantId, playlistId, revisionId)),
+      this.redis.get(this.categoriesKey(tenantId, playlistId, revisionId)),
+      this.redis.lrange(this.orderKey(tenantId, playlistId, revisionId), 0, -1)
+    ]);
+
+    if (serializedMeta === null || serializedCategories === null || itemIds.length === 0) {
+      return false;
+    }
+
+    try {
+      const parsedMeta = revisionMetaSchema.parse(JSON.parse(serializedMeta));
+      if (parsedMeta.revisionId !== revisionId) {
+        return false;
+      }
+
+      categorySummarySchema.parse(JSON.parse(serializedCategories));
+    } catch {
+      return false;
+    }
+
+    const serializedItems = await this.redis.mget(
+      ...itemIds.map((itemId) => this.itemKey(tenantId, playlistId, revisionId, itemId))
+    );
+    if (serializedItems.some((item) => item === null)) {
+      return false;
+    }
+
+    try {
+      for (const serializedItem of serializedItems) {
+        itemSchema.parse(JSON.parse(serializedItem as string));
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async writeHistory(historyKey: string, revisionIds: readonly string[]): Promise<void> {
+    await this.redis.del(historyKey);
+
+    if (revisionIds.length > 0) {
+      await this.redis.rpush(historyKey, ...revisionIds);
+    }
   }
 
   private intersectIds(memberSets: readonly string[][]): readonly string[] {
@@ -354,6 +560,10 @@ export class RedisCatalogRevisionStore implements CatalogRevisionStorePort {
     return `${this.keyPrefix}:v1:tenant:${tenantId}:playlist:${playlistId}:catalog:active`;
   }
 
+  private historyKey(tenantId: TenantId, playlistId: PlaylistId): string {
+    return `${this.keyPrefix}:v1:tenant:${tenantId}:playlist:${playlistId}:catalog:history`;
+  }
+
   private orderKey(tenantId: TenantId, playlistId: PlaylistId, revisionId: string): string {
     return `${this.keyPrefix}:v1:tenant:${tenantId}:playlist:${playlistId}:catalog:revision:${revisionId}:order`;
   }
@@ -365,6 +575,10 @@ export class RedisCatalogRevisionStore implements CatalogRevisionStorePort {
     itemId: string
   ): string {
     return `${this.keyPrefix}:v1:tenant:${tenantId}:playlist:${playlistId}:catalog:revision:${revisionId}:item:${itemId}`;
+  }
+
+  private tokenCatalogKey(tenantId: TenantId, playlistId: PlaylistId, revisionId: string): string {
+    return `${this.keyPrefix}:v1:tenant:${tenantId}:playlist:${playlistId}:catalog:revision:${revisionId}:search:tokens`;
   }
 
   private searchTokenKey(
@@ -384,3 +598,10 @@ export class RedisCatalogRevisionStore implements CatalogRevisionStorePort {
     return `${this.keyPrefix}:v1:tenant:${tenantId}:playlist:${playlistId}:catalog:revision:${revisionId}:meta`;
   }
 }
+
+
+
+
+
+
+

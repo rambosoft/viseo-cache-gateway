@@ -1,4 +1,4 @@
-﻿import type { AccessContext } from "../../core/access/models";
+import type { AccessContext } from "../../core/access/models";
 import type { CategorySummary } from "../../core/catalog/models";
 import type { PlaylistId } from "../../core/shared/brands";
 import { revisionNotReady } from "../../core/shared/errors";
@@ -28,6 +28,7 @@ export class ListPlaylistCategoriesService {
     this.telemetry.recordDuration("playlist_categories.read", Date.now() - startedAt);
 
     if (categories === null) {
+      await this.ensurePlaylistRevision.execute(args.accessContext, args.playlistId);
       throw revisionNotReady("Active revision is not available");
     }
 

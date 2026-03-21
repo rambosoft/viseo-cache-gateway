@@ -11,9 +11,15 @@ const environmentSchema = z.object({
   PRIMARY_SERVER_URL: z.string().url(),
   PRIMARY_SERVER_VALIDATE_PATH: z.string().default("/validate"),
   UPSTREAM_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
+  PLAYLIST_REVISION_STALE_AFTER_MS: z.coerce.number().int().nonnegative().default(300000),
+  REVISION_RETAIN_COUNT: z.coerce.number().int().positive().default(2),
   BULLMQ_PREFIX: z.string().min(1).default("cg:jobs"),
   PLAYLIST_REVISION_QUEUE_NAME: z.string().min(1).default("playlist-revision"),
-  PLAYLIST_REVISION_WORKER_CONCURRENCY: z.coerce.number().int().positive().default(2)
+  PLAYLIST_REVISION_WORKER_CONCURRENCY: z.coerce.number().int().positive().default(2),
+  PLAYLIST_REVISION_WORKER_HEARTBEAT_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
+  PLAYLIST_REVISION_WORKER_HEARTBEAT_STALE_AFTER_MS: z.coerce.number().int().positive().default(15000),
+  ENABLE_EVENT_LOOP_PROFILING: z.coerce.boolean().default(false),
+  EVENT_LOOP_PROFILING_INTERVAL_MS: z.coerce.number().int().positive().default(30000)
 });
 
 export type AppConfig = Readonly<{
@@ -25,9 +31,15 @@ export type AppConfig = Readonly<{
   primaryServerUrl: string;
   primaryServerValidatePath: string;
   upstreamTimeoutMs: number;
+  playlistRevisionStaleAfterMs: number;
+  revisionRetainCount: number;
   bullmqPrefix: string;
   playlistRevisionQueueName: string;
   playlistRevisionWorkerConcurrency: number;
+  playlistRevisionWorkerHeartbeatIntervalMs: number;
+  playlistRevisionWorkerHeartbeatStaleAfterMs: number;
+  enableEventLoopProfiling: boolean;
+  eventLoopProfilingIntervalMs: number;
 }>;
 
 export const loadConfig = (environment: NodeJS.ProcessEnv = process.env): AppConfig => {
@@ -42,8 +54,16 @@ export const loadConfig = (environment: NodeJS.ProcessEnv = process.env): AppCon
     primaryServerUrl: parsed.PRIMARY_SERVER_URL,
     primaryServerValidatePath: parsed.PRIMARY_SERVER_VALIDATE_PATH,
     upstreamTimeoutMs: parsed.UPSTREAM_TIMEOUT_MS,
+    playlistRevisionStaleAfterMs: parsed.PLAYLIST_REVISION_STALE_AFTER_MS,
+    revisionRetainCount: parsed.REVISION_RETAIN_COUNT,
     bullmqPrefix: parsed.BULLMQ_PREFIX,
     playlistRevisionQueueName: parsed.PLAYLIST_REVISION_QUEUE_NAME,
-    playlistRevisionWorkerConcurrency: parsed.PLAYLIST_REVISION_WORKER_CONCURRENCY
+    playlistRevisionWorkerConcurrency: parsed.PLAYLIST_REVISION_WORKER_CONCURRENCY,
+    playlistRevisionWorkerHeartbeatIntervalMs:
+      parsed.PLAYLIST_REVISION_WORKER_HEARTBEAT_INTERVAL_MS,
+    playlistRevisionWorkerHeartbeatStaleAfterMs:
+      parsed.PLAYLIST_REVISION_WORKER_HEARTBEAT_STALE_AFTER_MS,
+    enableEventLoopProfiling: parsed.ENABLE_EVENT_LOOP_PROFILING,
+    eventLoopProfilingIntervalMs: parsed.EVENT_LOOP_PROFILING_INTERVAL_MS
   };
 };

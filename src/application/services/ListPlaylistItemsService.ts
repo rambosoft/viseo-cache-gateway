@@ -32,6 +32,7 @@ export class ListPlaylistItemsService {
     this.telemetry.recordDuration("playlist_items.read", Date.now() - startedAt);
 
     if (page === null) {
+      await this.ensurePlaylistRevision.execute(args.accessContext, args.playlistId);
       throw revisionNotReady("Active revision is not available");
     }
 

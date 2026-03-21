@@ -5,10 +5,19 @@ import type {
   PaginatedItemsPage,
   SearchItemsPage
 } from "../../core/catalog/models";
-import type { ItemId, PlaylistId, TenantId } from "../../core/shared/brands";
+import type { ItemId, PlaylistId, RevisionId, TenantId } from "../../core/shared/brands";
+
+export type ActiveRevisionInfo = Readonly<{
+  revisionId: RevisionId;
+  createdAt: string;
+}>;
 
 export interface CatalogRevisionStorePort {
   hasActiveRevision(tenantId: TenantId, playlistId: PlaylistId): Promise<boolean>;
+  getActiveRevisionInfo(
+    tenantId: TenantId,
+    playlistId: PlaylistId
+  ): Promise<ActiveRevisionInfo | null>;
   activateRevision(snapshot: CatalogRevisionSnapshot): Promise<void>;
   getPaginatedItems(
     tenantId: TenantId,

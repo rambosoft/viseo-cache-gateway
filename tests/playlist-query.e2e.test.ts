@@ -63,6 +63,34 @@ describe("playlist query e2e", () => {
     expect(context.stats.getPendingBuildCount()).toBe(0);
   });
 
+  it("queues a stale refresh while continuing to serve the current active revision", async () => {
+    await context.close();
+    context = await createTestApp({ staleAfterMs: 0 });
+    await queueAndBuildRevision(context);
+
+    const response = await request(context.app)
+      .get(`/api/playlists/${playlistId}/items`)
+      .query({ page: 1, pageSize: 2 })
+      .set("Authorization", `Bearer ${token}`)
+      .expect(200);
+
+    expect(response.body.total).toBe(3);
+    expect(context.stats.getPendingBuildCount()).toBe(1);
+    expect(context.stats.getPlaylistFetchCount()).toBe(1);
+
+    await request(context.app)
+      .get(`/api/playlists/${playlistId}/items`)
+      .query({ page: 1, pageSize: 2 })
+      .set("Authorization", `Bearer ${token}`)
+      .expect(200);
+
+    expect(context.stats.getPendingBuildCount()).toBe(1);
+
+    await context.jobs.drain();
+
+    expect(context.stats.getPlaylistFetchCount()).toBe(2);
+  });
+
   it("searches within the active playlist revision", async () => {
     await queueAndBuildRevision(context);
 

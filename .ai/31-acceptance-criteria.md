@@ -19,13 +19,14 @@
 
 - Confirmed: Core logic is separated from Express, Redis, and BullMQ.
 - Confirmed: No historical `.ai/inital/*` file is needed as active implementation guidance.
-- Proposed: Revision activation is atomic and prevents partially built reads.
+- Confirmed: Revision activation is atomic and prevents partially built reads.
 
 ## Operational Acceptance
 
 - Confirmed: The service exposes a health endpoint.
-- Confirmed: Structured logs and basic telemetry hooks are present.
+- Confirmed: Structured logs and vendor-neutral telemetry hooks are present.
 - Confirmed: Stale-safe behavior exists when a healthy prior revision is available.
+- Confirmed: Stale revisions queue background refresh without blocking healthy reads.
 - Confirmed: Production packaging and startup are documented and testable.
 
 ## Performance Acceptance
@@ -33,4 +34,3 @@
 - Confirmed: Pagination target is sub-20 ms for a cache-hit active revision path under representative conditions.
 - Confirmed: Search target is under 50 ms for representative cache-hit active revision queries.
 - Confirmed: Detail lookup target is under 200 ms when upstream latency allows it.
-

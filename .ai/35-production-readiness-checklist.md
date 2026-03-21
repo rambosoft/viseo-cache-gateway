@@ -10,12 +10,12 @@
 
 ## Checklist
 
-- [ ] Config is validated at startup and required secrets are present.
-- [ ] Redis connectivity, job wiring, and graceful shutdown are implemented and tested.
-- [ ] Auth validation, ingestion, revision activation, query APIs, and detail APIs are covered by automated tests.
-- [ ] Health endpoint reflects essential service readiness.
-- [ ] Structured logs redact secrets and include correlation context.
-- [ ] Failure modes for source outage, auth outage, and invalid cached data are tested.
-- [ ] Performance targets are measured against representative data.
-- [ ] Docker build and runtime packaging are documented and reproducible.
-- [ ] `.ai/README.md` and `40-agent-start-here.md` remain aligned with implementation reality.
+- [x] Config is validated at startup and required secrets are present.
+- [x] Redis connectivity, job wiring, and graceful shutdown are implemented and tested.
+- [x] Auth validation, ingestion, revision activation, query APIs, and detail APIs are covered by automated tests.
+- [x] Health endpoint reflects essential service readiness.
+- [x] Structured logs redact secrets and include correlation context.
+- [x] Failure modes for source outage, auth outage, invalid cached data, and corrupted active revisions are tested.
+- [x] Performance targets are measured against representative data.
+- [x] Docker build and runtime packaging are documented and reproducible.
+- [x] `.ai/README.md` and `40-agent-start-here.md` remain aligned with implementation reality.

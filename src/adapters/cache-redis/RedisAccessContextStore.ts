@@ -39,6 +39,7 @@ const cachedAccessContextSchema = z.object({
 type RedisLike = {
   get(key: string): Promise<string | null>;
   set(key: string, value: string, mode: "PX", ttlMs: number): Promise<unknown>;
+  del(...keys: string[]): Promise<number>;
 };
 
 export class RedisAccessContextStore implements AccessContextCachePort {
@@ -48,12 +49,20 @@ export class RedisAccessContextStore implements AccessContextCachePort {
   ) {}
 
   public async get(tokenHash: string): Promise<AccessContext | null> {
-    const payload = await this.redis.get(this.key(tokenHash));
+    const cacheKey = this.key(tokenHash);
+    const payload = await this.redis.get(cacheKey);
     if (payload === null) {
       return null;
     }
 
-    const parsed = cachedAccessContextSchema.parse(JSON.parse(payload));
+    let parsed: z.infer<typeof cachedAccessContextSchema>;
+    try {
+      parsed = cachedAccessContextSchema.parse(JSON.parse(payload));
+    } catch {
+      await this.redis.del(cacheKey);
+      return null;
+    }
+
     return {
       principalId: asPrincipalId(parsed.principalId),
       tenantId: asTenantId(parsed.tenantId),

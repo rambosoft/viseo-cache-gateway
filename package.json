@@ -4,14 +4,14 @@
   "private": true,
   "description": "Multi-tenant metadata caching and indexing gateway",
   "engines": {
-    "node": ">=22.20.0"
+    "node": "24.x"
   },
   "scripts": {
     "dev": "tsx watch src/bootstrap/server.ts",
     "worker": "tsx watch src/bootstrap/worker.ts",
     "build": "swc src -d dist --copy-files",
-    "start:server": "node dist/bootstrap/server.js",
-    "start:worker": "node dist/bootstrap/worker.js",
+    "start:server": "node dist/src/bootstrap/server.js",
+    "start:worker": "node dist/src/bootstrap/worker.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:performance": "vitest run --config vitest.performance.config.ts",
@@ -37,3 +37,5 @@
     "vitest": "^3.2.4"
   }
 }
+
+

@@ -5,8 +5,11 @@ import { RedisCatalogRevisionStore } from "../adapters/cache-redis/RedisCatalogR
 import { createApp } from "../adapters/http-express/createApp";
 import { BullMqPlaylistRevisionJobQueue } from "../adapters/jobs-bullmq/BullMqPlaylistRevisionJobQueue";
 import { PlaylistRevisionQueueHealthProbe } from "../adapters/platform/PlaylistRevisionQueueHealthProbe";
+import { PlaylistRevisionWorkerHealthProbe } from "../adapters/platform/PlaylistRevisionWorkerHealthProbe";
 import { RedisHealthProbe } from "../adapters/platform/RedisHealthProbe";
+import { RedisWorkerHeartbeatStore } from "../adapters/platform/RedisWorkerHeartbeatStore";
 import { M3uPlaylistItemDetailAdapter } from "../adapters/source-m3u/M3uPlaylistItemDetailAdapter";
+import { HttpXtreamAdapter } from "../adapters/source-xtream/HttpXtreamAdapter";
 import { HttpPrimaryServerClient } from "../adapters/source-primary-server/HttpPrimaryServerClient";
 import { GetPlaylistItemDetailService } from "../application/services/GetPlaylistItemDetailService";
 import { GetServiceHealthService } from "../application/services/health/GetServiceHealthService";
@@ -16,7 +19,9 @@ import { ListPlaylistItemsService } from "../application/services/ListPlaylistIt
 import { SearchPlaylistItemsService } from "../application/services/SearchPlaylistItemsService";
 import { ValidateAccessContextService } from "../application/services/ValidateAccessContextService";
 import { loadConfig } from "../config/env";
+import { closeHttpRuntime } from "./lifecycle";
 import { createLogger } from "./logger";
+import { startEventLoopProfiling } from "./profiling";
 import { createRedis } from "./redis";
 import { StructuredTelemetry } from "./telemetry";
 
@@ -24,11 +29,22 @@ const bootstrap = async (): Promise<void> => {
   const config = loadConfig();
   const logger = createLogger(config.logLevel);
   const telemetry = new StructuredTelemetry(logger.child({ component: "telemetry" }));
+  const stopProfiling = startEventLoopProfiling({
+    enabled: config.enableEventLoopProfiling,
+    intervalMs: config.eventLoopProfilingIntervalMs,
+    logger,
+    telemetry,
+    component: "http"
+  });
   const redis = createRedis(config.redisUrl);
   await redis.connect();
 
   const accessContextCache = new RedisAccessContextStore(redis, config.redisKeyPrefix);
-  const revisionStore = new RedisCatalogRevisionStore(redis, config.redisKeyPrefix);
+  const revisionStore = new RedisCatalogRevisionStore(
+    redis,
+    config.redisKeyPrefix,
+    config.revisionRetainCount
+  );
   const primaryServer = new HttpPrimaryServerClient({
     baseUrl: config.primaryServerUrl,
     validatePath: config.primaryServerValidatePath,
@@ -36,15 +52,28 @@ const bootstrap = async (): Promise<void> => {
     logger
   });
   const m3uPlaylistItemDetail = new M3uPlaylistItemDetailAdapter();
+  const xtreamAdapter = new HttpXtreamAdapter({
+    timeoutMs: config.upstreamTimeoutMs,
+    logger
+  });
   const revisionJobQueue = new BullMqPlaylistRevisionJobQueue({
     redisUrl: config.redisUrl,
     prefix: config.bullmqPrefix,
     queueName: config.playlistRevisionQueueName,
     logger
   });
+  const workerHeartbeatStore = new RedisWorkerHeartbeatStore(
+    redis,
+    config.redisKeyPrefix,
+    config.playlistRevisionWorkerHeartbeatStaleAfterMs
+  );
   const getServiceHealth = new GetServiceHealthService([
     new RedisHealthProbe(redis),
-    new PlaylistRevisionQueueHealthProbe(revisionJobQueue)
+    new PlaylistRevisionQueueHealthProbe(revisionJobQueue),
+    new PlaylistRevisionWorkerHealthProbe(
+      workerHeartbeatStore,
+      config.playlistRevisionWorkerHeartbeatStaleAfterMs
+    )
   ]);
   const validateAccessContext = new ValidateAccessContextService(
     accessContextCache,
@@ -52,7 +81,9 @@ const bootstrap = async (): Promise<void> => {
   );
   const ensurePlaylistRevision = new EnsurePlaylistRevisionService(
     revisionStore,
-    revisionJobQueue
+    revisionJobQueue,
+    logger,
+    config.playlistRevisionStaleAfterMs
   );
   const listPlaylistItems = new ListPlaylistItemsService(
     ensurePlaylistRevision,
@@ -72,7 +103,7 @@ const bootstrap = async (): Promise<void> => {
   const getPlaylistItemDetail = new GetPlaylistItemDetailService(
     ensurePlaylistRevision,
     revisionStore,
-    [m3uPlaylistItemDetail],
+    [m3uPlaylistItemDetail, xtreamAdapter],
     telemetry
   );
 
@@ -97,17 +128,12 @@ const bootstrap = async (): Promise<void> => {
   });
 
   const close = async (): Promise<void> => {
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => {
-        if (error !== undefined) {
-          reject(error);
-          return;
-        }
-        resolve();
-      });
+    await closeHttpRuntime({
+      server,
+      stopProfiling,
+      revisionJobQueue,
+      redis
     });
-    await revisionJobQueue.close();
-    await redis.quit();
   };
 
   process.on("SIGINT", () => {

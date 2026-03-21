@@ -24,16 +24,16 @@
 
 - Confirmed: The system must degrade gracefully when Xtream or M3U sources are unavailable and a safe active revision exists.
 - Confirmed: The system must fail safely when no valid auth context or active revision is available.
-- Proposed: Process lifecycle must include graceful shutdown for HTTP server, Redis clients, and job workers.
+- Confirmed: Process lifecycle includes graceful shutdown for HTTP server, Redis clients, and job workers.
 
 ## Maintainability
 
 - Confirmed: Core logic must remain decoupled from external adapters.
 - Confirmed: Contracts and validation must stay explicit.
-- Proposed: Schema and key versioning should make future migrations additive and controlled.
+- Confirmed: Schema and key versioning make future migrations additive and controlled.
 
 ## Operability
 
 - Confirmed: Health checks and structured logging are required.
-- Proposed: Telemetry should be vendor-neutral and correlation-friendly.
-- Proposed: Configuration should be environment-driven and validated at startup.
+- Confirmed: Telemetry is vendor-neutral and correlation-friendly.
+- Confirmed: Configuration is environment-driven and validated at startup.

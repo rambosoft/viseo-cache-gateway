@@ -65,7 +65,7 @@ export type PlaylistItemDetail = Readonly<{
     tags: readonly string[];
   }>;
   sourceNative: Readonly<Record<string, string | number | boolean | null>>;
-  detailPayload?: Readonly<Record<string, string | number | boolean | null>>;
+  detailPayload?: Readonly<Record<string, unknown>>;
   detailAvailability: "limited" | "full";
   note?: string;
 }>;

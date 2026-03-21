@@ -30,6 +30,7 @@ export class GetPlaylistItemDetailService {
     );
 
     if (item === null) {
+      await this.ensurePlaylistRevision.execute(args.accessContext, args.playlistId);
       this.telemetry.recordDuration("playlist_item_detail.read", Date.now() - startedAt);
       throw notFound("Playlist item was not found in the active revision");
     }

@@ -9,6 +9,7 @@ import type { PlaylistRevisionJobQueuePort } from "../../src/ports/jobs/Playlist
 
 export class InMemoryPlaylistRevisionJobQueue implements PlaylistRevisionJobQueuePort {
   private readonly pending = new Map<string, PlaylistRevisionJob>();
+  private failedCount = 0;
 
   public async enqueue(job: PlaylistRevisionJob): Promise<"enqueued" | "already_queued"> {
     const normalized = parsePlaylistRevisionJob(serializePlaylistRevisionJob(job));
@@ -28,7 +29,10 @@ export class InMemoryPlaylistRevisionJobQueue implements PlaylistRevisionJobQueu
 
   public async getJobCounts(...types: JobType[]): Promise<Record<string, number>> {
     return Object.fromEntries(
-      types.map((type) => [type, type === "waiting" ? this.pending.size : 0])
+      types.map((type) => [
+        type,
+        type === "waiting" ? this.pending.size : type === "failed" ? this.failedCount : 0
+      ])
     );
   }
 
@@ -37,7 +41,12 @@ export class InMemoryPlaylistRevisionJobQueue implements PlaylistRevisionJobQueu
     this.pending.clear();
 
     for (const job of queuedJobs) {
-      await processJob(job);
+      try {
+        await processJob(job);
+      } catch (error) {
+        this.failedCount += 1;
+        throw error;
+      }
     }
   }
 

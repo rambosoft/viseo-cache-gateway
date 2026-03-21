@@ -1,9 +1,13 @@
 import { RedisCatalogRevisionStore } from "../adapters/cache-redis/RedisCatalogRevisionStore";
 import { BullMqPlaylistRevisionWorker } from "../adapters/jobs-bullmq/BullMqPlaylistRevisionWorker";
+import { RedisWorkerHeartbeatStore } from "../adapters/platform/RedisWorkerHeartbeatStore";
 import { M3uPlaylistIngestionAdapter } from "../adapters/source-m3u/M3uPlaylistIngestionAdapter";
+import { HttpXtreamAdapter } from "../adapters/source-xtream/HttpXtreamAdapter";
 import { BuildPlaylistRevisionService } from "../application/services/BuildPlaylistRevisionService";
 import { loadConfig } from "../config/env";
+import { closeWorkerRuntime } from "./lifecycle";
 import { createLogger } from "./logger";
+import { startEventLoopProfiling } from "./profiling";
 import { createRedis } from "./redis";
 import { StructuredTelemetry } from "./telemetry";
 
@@ -11,17 +15,37 @@ const bootstrap = async (): Promise<void> => {
   const config = loadConfig();
   const logger = createLogger(config.logLevel);
   const telemetry = new StructuredTelemetry(logger.child({ component: "telemetry" }));
+  const stopProfiling = startEventLoopProfiling({
+    enabled: config.enableEventLoopProfiling,
+    intervalMs: config.eventLoopProfilingIntervalMs,
+    logger,
+    telemetry,
+    component: "worker"
+  });
   const redis = createRedis(config.redisUrl);
   await redis.connect();
 
-  const revisionStore = new RedisCatalogRevisionStore(redis, config.redisKeyPrefix);
-  const ingestionAdapter = new M3uPlaylistIngestionAdapter({
+  const revisionStore = new RedisCatalogRevisionStore(
+    redis,
+    config.redisKeyPrefix,
+    config.revisionRetainCount
+  );
+  const heartbeatStore = new RedisWorkerHeartbeatStore(
+    redis,
+    config.redisKeyPrefix,
+    config.playlistRevisionWorkerHeartbeatStaleAfterMs
+  );
+  const m3uIngestionAdapter = new M3uPlaylistIngestionAdapter({
+    timeoutMs: config.upstreamTimeoutMs,
+    logger
+  });
+  const xtreamAdapter = new HttpXtreamAdapter({
     timeoutMs: config.upstreamTimeoutMs,
     logger
   });
   const buildPlaylistRevision = new BuildPlaylistRevisionService(
     revisionStore,
-    [ingestionAdapter],
+    [m3uIngestionAdapter, xtreamAdapter],
     logger,
     telemetry
   );
@@ -34,6 +58,12 @@ const bootstrap = async (): Promise<void> => {
     processJob: (job) => buildPlaylistRevision.execute(job)
   });
 
+  await heartbeatStore.beat(new Date().toISOString());
+  const heartbeatInterval = setInterval(() => {
+    void heartbeatStore.beat(new Date().toISOString());
+  }, config.playlistRevisionWorkerHeartbeatIntervalMs);
+  heartbeatInterval.unref();
+
   logger.info("Playlist revision worker listening", {
     queueName: config.playlistRevisionQueueName,
     queuePrefix: config.bullmqPrefix,
@@ -41,8 +71,12 @@ const bootstrap = async (): Promise<void> => {
   });
 
   const close = async (): Promise<void> => {
-    await worker.close();
-    await redis.quit();
+    await closeWorkerRuntime({
+      stopHeartbeat: () => clearInterval(heartbeatInterval),
+      stopProfiling,
+      worker,
+      redis
+    });
   };
 
   process.on("SIGINT", () => {

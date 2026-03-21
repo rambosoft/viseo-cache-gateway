@@ -12,10 +12,11 @@ export class PlaylistRevisionQueueHealthProbe implements HealthProbePort {
   public async check() {
     try {
       const counts = await this.queue.getJobCounts("waiting", "active", "delayed", "failed");
+      const failedCount = counts.failed ?? 0;
       return {
         name: "playlist_revision_queue",
-        status: "ok",
-        detail: `waiting=${counts.waiting ?? 0},active=${counts.active ?? 0},delayed=${counts.delayed ?? 0},failed=${counts.failed ?? 0}`
+        status: failedCount > 0 ? "down" : "ok",
+        detail: `waiting=${counts.waiting ?? 0},active=${counts.active ?? 0},delayed=${counts.delayed ?? 0},failed=${failedCount}`
       } as const;
     } catch (error) {
       return {
