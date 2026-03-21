@@ -1,14 +1,15 @@
-﻿import { randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 import express, { type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 
+import { GetPlaylistItemDetailService } from "../../application/services/GetPlaylistItemDetailService";
 import { ListPlaylistCategoriesService } from "../../application/services/ListPlaylistCategoriesService";
 import { ListPlaylistItemsService } from "../../application/services/ListPlaylistItemsService";
 import { SearchPlaylistItemsService } from "../../application/services/SearchPlaylistItemsService";
 import { ValidateAccessContextService } from "../../application/services/ValidateAccessContextService";
 import type { AccessContext } from "../../core/access/models";
-import { asPlaylistId } from "../../core/shared/brands";
+import { asItemId, asPlaylistId } from "../../core/shared/brands";
 import { AppError, authenticationFailed, validationFailed } from "../../core/shared/errors";
 import type { LoggerPort } from "../../ports/platform/LoggerPort";
 
@@ -33,6 +34,7 @@ export const createApp = (dependencies: {
   listPlaylistItems: ListPlaylistItemsService;
   searchPlaylistItems: SearchPlaylistItemsService;
   listPlaylistCategories: ListPlaylistCategoriesService;
+  getPlaylistItemDetail: GetPlaylistItemDetailService;
 }): express.Express => {
   const app = express();
 
@@ -120,6 +122,30 @@ export const createApp = (dependencies: {
         });
 
         res.json({ categories });
+      } catch (error) {
+        next(error);
+      }
+    }
+  );
+
+  app.get(
+    "/api/playlists/:playlistId/items/:itemId/detail",
+    authenticated(dependencies.validateAccessContext),
+    async (
+      req: Request<{ playlistId: string; itemId: string }>,
+      res: Response<unknown, Locals>,
+      next
+    ) => {
+      try {
+        const playlistId = asPlaylistId(req.params.playlistId);
+        const itemId = asItemId(req.params.itemId);
+        const detail = await dependencies.getPlaylistItemDetail.execute({
+          accessContext: res.locals.accessContext,
+          playlistId,
+          itemId
+        });
+
+        res.json(detail);
       } catch (error) {
         next(error);
       }

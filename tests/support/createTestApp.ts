@@ -1,4 +1,4 @@
-﻿import { createServer, type Server } from "node:http";
+import { createServer, type Server } from "node:http";
 import { once } from "node:events";
 
 import Redis from "ioredis-mock";
@@ -7,7 +7,9 @@ import { RedisAccessContextStore } from "../../src/adapters/cache-redis/RedisAcc
 import { RedisCatalogRevisionStore } from "../../src/adapters/cache-redis/RedisCatalogRevisionStore";
 import { createApp } from "../../src/adapters/http-express/createApp";
 import { M3uPlaylistIngestionAdapter } from "../../src/adapters/source-m3u/M3uPlaylistIngestionAdapter";
+import { M3uPlaylistItemDetailAdapter } from "../../src/adapters/source-m3u/M3uPlaylistItemDetailAdapter";
 import { HttpPrimaryServerClient } from "../../src/adapters/source-primary-server/HttpPrimaryServerClient";
+import { GetPlaylistItemDetailService } from "../../src/application/services/GetPlaylistItemDetailService";
 import { ListPlaylistCategoriesService } from "../../src/application/services/ListPlaylistCategoriesService";
 import { EnsurePlaylistRevisionService } from "../../src/application/services/EnsurePlaylistRevisionService";
 import { ListPlaylistItemsService } from "../../src/application/services/ListPlaylistItemsService";
@@ -97,6 +99,7 @@ export const createTestApp = async (): Promise<TestAppContext> => {
     timeoutMs: 5_000,
     logger
   });
+  const m3uPlaylistItemDetail = new M3uPlaylistItemDetailAdapter();
   const validateAccessContext = new ValidateAccessContextService(
     accessContextCache,
     primaryServerClient
@@ -120,6 +123,12 @@ export const createTestApp = async (): Promise<TestAppContext> => {
     revisionStore,
     telemetry
   );
+  const getPlaylistItemDetail = new GetPlaylistItemDetailService(
+    ensurePlaylistRevision,
+    revisionStore,
+    [m3uPlaylistItemDetail],
+    telemetry
+  );
 
   return {
     app: createApp({
@@ -127,7 +136,8 @@ export const createTestApp = async (): Promise<TestAppContext> => {
       validateAccessContext,
       listPlaylistItems,
       searchPlaylistItems,
-      listPlaylistCategories
+      listPlaylistCategories,
+      getPlaylistItemDetail
     }),
     stats: {
       getPrimaryValidationCount: () => primaryValidationCount,
@@ -135,6 +145,7 @@ export const createTestApp = async (): Promise<TestAppContext> => {
     },
     close: async () => {
       await Promise.all([closeServer(primaryServer), closeServer(playlistServer)]);
+      redis.disconnect();
     }
   };
 };

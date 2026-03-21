@@ -1,10 +1,11 @@
-﻿import { z } from "zod";
+import { z } from "zod";
 
 import { tokenizeSearchText } from "../../core/catalog/searchTokens";
 import {
   asItemId,
   asPlaylistId,
   asRevisionId,
+  type ItemId,
   type PlaylistId,
   type TenantId
 } from "../../core/shared/brands";
@@ -244,6 +245,26 @@ export class RedisCatalogRevisionStore implements CatalogRevisionStorePort {
     }
 
     return categorySummarySchema.parse(JSON.parse(serializedCategories));
+  }
+
+  public async getItem(
+    tenantId: TenantId,
+    playlistId: PlaylistId,
+    itemId: ItemId
+  ): Promise<NormalizedItemSummary | null> {
+    const revisionContext = await this.getRevisionContext(tenantId, playlistId);
+    if (revisionContext === null) {
+      return null;
+    }
+
+    const serializedItem = await this.redis.get(
+      this.itemKey(tenantId, playlistId, revisionContext.revisionId, itemId)
+    );
+    if (serializedItem === null) {
+      return null;
+    }
+
+    return this.parseItem(serializedItem);
   }
 
   private async getRevisionContext(

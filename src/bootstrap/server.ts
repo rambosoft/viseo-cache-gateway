@@ -1,10 +1,12 @@
-﻿import { createServer } from "node:http";
+import { createServer } from "node:http";
 
 import { RedisAccessContextStore } from "../adapters/cache-redis/RedisAccessContextStore";
 import { RedisCatalogRevisionStore } from "../adapters/cache-redis/RedisCatalogRevisionStore";
 import { createApp } from "../adapters/http-express/createApp";
 import { M3uPlaylistIngestionAdapter } from "../adapters/source-m3u/M3uPlaylistIngestionAdapter";
+import { M3uPlaylistItemDetailAdapter } from "../adapters/source-m3u/M3uPlaylistItemDetailAdapter";
 import { HttpPrimaryServerClient } from "../adapters/source-primary-server/HttpPrimaryServerClient";
+import { GetPlaylistItemDetailService } from "../application/services/GetPlaylistItemDetailService";
 import { ListPlaylistCategoriesService } from "../application/services/ListPlaylistCategoriesService";
 import { EnsurePlaylistRevisionService } from "../application/services/EnsurePlaylistRevisionService";
 import { ListPlaylistItemsService } from "../application/services/ListPlaylistItemsService";
@@ -33,6 +35,7 @@ const bootstrap = async (): Promise<void> => {
     timeoutMs: config.upstreamTimeoutMs,
     logger
   });
+  const m3uPlaylistItemDetail = new M3uPlaylistItemDetailAdapter();
   const validateAccessContext = new ValidateAccessContextService(
     accessContextCache,
     primaryServer
@@ -56,13 +59,20 @@ const bootstrap = async (): Promise<void> => {
     revisionStore,
     telemetry
   );
+  const getPlaylistItemDetail = new GetPlaylistItemDetailService(
+    ensurePlaylistRevision,
+    revisionStore,
+    [m3uPlaylistItemDetail],
+    telemetry
+  );
 
   const app = createApp({
     logger,
     validateAccessContext,
     listPlaylistItems,
     searchPlaylistItems,
-    listPlaylistCategories
+    listPlaylistCategories,
+    getPlaylistItemDetail
   });
 
   const server = createServer(app);

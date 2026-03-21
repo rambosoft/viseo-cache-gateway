@@ -1,10 +1,11 @@
-﻿import type {
+import type {
   CatalogRevisionSnapshot,
   CategorySummary,
+  NormalizedItemSummary,
   PaginatedItemsPage,
   SearchItemsPage
 } from "../../core/catalog/models";
-import type { PlaylistId, TenantId } from "../../core/shared/brands";
+import type { ItemId, PlaylistId, TenantId } from "../../core/shared/brands";
 
 export interface CatalogRevisionStorePort {
   hasActiveRevision(tenantId: TenantId, playlistId: PlaylistId): Promise<boolean>;
@@ -26,4 +27,9 @@ export interface CatalogRevisionStorePort {
     tenantId: TenantId,
     playlistId: PlaylistId
   ): Promise<readonly CategorySummary[] | null>;
+  getItem(
+    tenantId: TenantId,
+    playlistId: PlaylistId,
+    itemId: ItemId
+  ): Promise<NormalizedItemSummary | null>;
 }

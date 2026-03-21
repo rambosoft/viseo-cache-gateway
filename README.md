@@ -1,4 +1,4 @@
-﻿# cache_gateway
+# cache_gateway
 
 Implemented slices:
 
@@ -11,6 +11,7 @@ Implemented slices:
 - one paginated playlist items endpoint end to end
 - playlist-scoped search over active revision data
 - playlist-scoped category summaries over active revision data
+- playlist-scoped item detail with limited M3U detail responses
 
 Key docs:
 
