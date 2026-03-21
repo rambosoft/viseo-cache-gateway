@@ -1,6 +1,6 @@
-# cache_gateway
+﻿# cache_gateway
 
-First implemented slice:
+Implemented slices:
 
 - config bootstrap with runtime validation
 - structured logger bootstrap
@@ -9,6 +9,8 @@ First implemented slice:
 - primary-server validation flow
 - one M3U ingestion flow end to end
 - one paginated playlist items endpoint end to end
+- playlist-scoped search over active revision data
+- playlist-scoped category summaries over active revision data
 
 Key docs:
 

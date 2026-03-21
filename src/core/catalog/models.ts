@@ -1,4 +1,4 @@
-import type { ItemId, PlaylistId, RevisionId, TenantId } from "../shared/brands";
+﻿import type { ItemId, PlaylistId, RevisionId, TenantId } from "../shared/brands";
 import type { SourceType } from "../access/models";
 
 export type MediaType = "vod" | "series" | "live";
@@ -35,4 +35,16 @@ export type PaginatedItemsPage = Readonly<{
   total: number;
   hasMore: boolean;
   revisionId: RevisionId;
+}>;
+
+export type SearchItemsPage = Readonly<
+  PaginatedItemsPage & {
+    query: string;
+  }
+>;
+
+export type CategorySummary = Readonly<{
+  categoryKey: string;
+  categoryLabel: string;
+  itemCount: number;
 }>;

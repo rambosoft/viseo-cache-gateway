@@ -1,12 +1,14 @@
-import { createServer } from "node:http";
+﻿import { createServer } from "node:http";
 
-import { createApp } from "../adapters/http-express/createApp";
 import { RedisAccessContextStore } from "../adapters/cache-redis/RedisAccessContextStore";
 import { RedisCatalogRevisionStore } from "../adapters/cache-redis/RedisCatalogRevisionStore";
-import { HttpPrimaryServerClient } from "../adapters/source-primary-server/HttpPrimaryServerClient";
+import { createApp } from "../adapters/http-express/createApp";
 import { M3uPlaylistIngestionAdapter } from "../adapters/source-m3u/M3uPlaylistIngestionAdapter";
+import { HttpPrimaryServerClient } from "../adapters/source-primary-server/HttpPrimaryServerClient";
+import { ListPlaylistCategoriesService } from "../application/services/ListPlaylistCategoriesService";
 import { EnsurePlaylistRevisionService } from "../application/services/EnsurePlaylistRevisionService";
 import { ListPlaylistItemsService } from "../application/services/ListPlaylistItemsService";
+import { SearchPlaylistItemsService } from "../application/services/SearchPlaylistItemsService";
 import { ValidateAccessContextService } from "../application/services/ValidateAccessContextService";
 import { loadConfig } from "../config/env";
 import { createLogger } from "./logger";
@@ -38,17 +40,29 @@ const bootstrap = async (): Promise<void> => {
   const ensurePlaylistRevision = new EnsurePlaylistRevisionService(revisionStore, [
     ingestionAdapter
   ]);
+  const telemetry = new NoopTelemetry();
   const listPlaylistItems = new ListPlaylistItemsService(
     ensurePlaylistRevision,
     revisionStore,
-    new NoopTelemetry()
+    telemetry
+  );
+  const searchPlaylistItems = new SearchPlaylistItemsService(
+    ensurePlaylistRevision,
+    revisionStore,
+    telemetry
+  );
+  const listPlaylistCategories = new ListPlaylistCategoriesService(
+    ensurePlaylistRevision,
+    revisionStore,
+    telemetry
   );
 
   const app = createApp({
     logger,
     validateAccessContext,
-    ensurePlaylistRevision,
-    listPlaylistItems
+    listPlaylistItems,
+    searchPlaylistItems,
+    listPlaylistCategories
   });
 
   const server = createServer(app);

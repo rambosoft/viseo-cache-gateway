@@ -10,8 +10,10 @@ import { RedisCatalogRevisionStore } from "../src/adapters/cache-redis/RedisCata
 import { createApp } from "../src/adapters/http-express/createApp";
 import { M3uPlaylistIngestionAdapter } from "../src/adapters/source-m3u/M3uPlaylistIngestionAdapter";
 import { HttpPrimaryServerClient } from "../src/adapters/source-primary-server/HttpPrimaryServerClient";
+import { ListPlaylistCategoriesService } from "../src/application/services/ListPlaylistCategoriesService";
 import { EnsurePlaylistRevisionService } from "../src/application/services/EnsurePlaylistRevisionService";
 import { ListPlaylistItemsService } from "../src/application/services/ListPlaylistItemsService";
+import { SearchPlaylistItemsService } from "../src/application/services/SearchPlaylistItemsService";
 import { ValidateAccessContextService } from "../src/application/services/ValidateAccessContextService";
 import { createLogger } from "../src/bootstrap/logger";
 import { NoopTelemetry } from "../src/bootstrap/telemetry";
@@ -19,7 +21,7 @@ import { NoopTelemetry } from "../src/bootstrap/telemetry";
 const token = "integration-test-token";
 const playlistId = "pl_demo";
 
-describe("first vertical slice", () => {
+describe("query path slices", () => {
   let primaryServer: Server;
   let playlistServer: Server;
   let primaryServerUrl = "";
@@ -116,17 +118,29 @@ describe("first vertical slice", () => {
     const ensurePlaylistRevision = new EnsurePlaylistRevisionService(revisionStore, [
       ingestionAdapter
     ]);
+    const telemetry = new NoopTelemetry();
     const listPlaylistItems = new ListPlaylistItemsService(
       ensurePlaylistRevision,
       revisionStore,
-      new NoopTelemetry()
+      telemetry
+    );
+    const searchPlaylistItems = new SearchPlaylistItemsService(
+      ensurePlaylistRevision,
+      revisionStore,
+      telemetry
+    );
+    const listPlaylistCategories = new ListPlaylistCategoriesService(
+      ensurePlaylistRevision,
+      revisionStore,
+      telemetry
     );
 
     return createApp({
       logger,
       validateAccessContext,
-      ensurePlaylistRevision,
-      listPlaylistItems
+      listPlaylistItems,
+      searchPlaylistItems,
+      listPlaylistCategories
     });
   };
 
@@ -172,6 +186,40 @@ describe("first vertical slice", () => {
     expect(playlistFetchCount).toBe(1);
   });
 
+  it("supports playlist-scoped token search against the active revision", async () => {
+    const app = buildApp();
+
+    const response = await request(app)
+      .get(`/api/playlists/${playlistId}/search`)
+      .query({ q: "charlie series", page: 1, pageSize: 10 })
+      .set("Authorization", `Bearer ${token}`)
+      .expect(200);
+
+    expect(response.body.query).toBe("charlie series");
+    expect(response.body.total).toBe(1);
+    expect(response.body.items).toHaveLength(1);
+    expect(response.body.items[0].title).toBe("Charlie Series");
+    expect(primaryValidationCount).toBe(1);
+    expect(playlistFetchCount).toBe(1);
+  });
+
+  it("returns category summaries from the active revision", async () => {
+    const app = buildApp();
+
+    const response = await request(app)
+      .get(`/api/playlists/${playlistId}/categories`)
+      .set("Authorization", `Bearer ${token}`)
+      .expect(200);
+
+    expect(response.body.categories).toEqual([
+      { categoryKey: "live", categoryLabel: "Live", itemCount: 1 },
+      { categoryKey: "movies", categoryLabel: "Movies", itemCount: 1 },
+      { categoryKey: "series", categoryLabel: "Series", itemCount: 1 }
+    ]);
+    expect(primaryValidationCount).toBe(1);
+    expect(playlistFetchCount).toBe(1);
+  });
+
   it("rejects access to playlists outside the validated access context", async () => {
     const app = buildApp();
 
@@ -183,4 +231,3 @@ describe("first vertical slice", () => {
     expect(response.body.error.code).toBe("authorization_failed");
   });
 });
-

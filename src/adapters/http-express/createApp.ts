@@ -3,17 +3,22 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 
+import { ListPlaylistCategoriesService } from "../../application/services/ListPlaylistCategoriesService";
+import { ListPlaylistItemsService } from "../../application/services/ListPlaylistItemsService";
+import { SearchPlaylistItemsService } from "../../application/services/SearchPlaylistItemsService";
+import { ValidateAccessContextService } from "../../application/services/ValidateAccessContextService";
 import type { AccessContext } from "../../core/access/models";
 import { asPlaylistId } from "../../core/shared/brands";
 import { AppError, authenticationFailed, validationFailed } from "../../core/shared/errors";
-import { EnsurePlaylistRevisionService } from "../../application/services/EnsurePlaylistRevisionService";
-import { ListPlaylistItemsService } from "../../application/services/ListPlaylistItemsService";
-import { ValidateAccessContextService } from "../../application/services/ValidateAccessContextService";
 import type { LoggerPort } from "../../ports/platform/LoggerPort";
 
 const paginationQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().positive().max(100).default(50)
+});
+
+const searchQuerySchema = paginationQuerySchema.extend({
+  q: z.string().trim().min(1)
 });
 
 type Locals = {
@@ -25,8 +30,9 @@ type Locals = {
 export const createApp = (dependencies: {
   logger: LoggerPort;
   validateAccessContext: ValidateAccessContextService;
-  ensurePlaylistRevision: EnsurePlaylistRevisionService;
   listPlaylistItems: ListPlaylistItemsService;
+  searchPlaylistItems: SearchPlaylistItemsService;
+  listPlaylistCategories: ListPlaylistCategoriesService;
 }): express.Express => {
   const app = express();
 
@@ -47,7 +53,7 @@ export const createApp = (dependencies: {
   app.get(
     "/api/auth/validate",
     authenticated(dependencies.validateAccessContext),
-    (req: Request, res: Response<unknown, Locals>) => {
+    (_req: Request, res: Response<unknown, Locals>) => {
       const accessContext = res.locals.accessContext;
       res.json({
         principalId: accessContext.principalId,
@@ -65,7 +71,8 @@ export const createApp = (dependencies: {
     async (req: Request<{ playlistId: string }>, res: Response<unknown, Locals>, next) => {
       try {
         const query = paginationQuerySchema.parse(req.query);
-        const playlistId = asPlaylistId(req.params.playlistId);        const page = await dependencies.listPlaylistItems.execute({
+        const playlistId = asPlaylistId(req.params.playlistId);
+        const page = await dependencies.listPlaylistItems.execute({
           accessContext: res.locals.accessContext,
           playlistId,
           page: query.page,
@@ -73,6 +80,46 @@ export const createApp = (dependencies: {
         });
 
         res.json(page);
+      } catch (error) {
+        next(error);
+      }
+    }
+  );
+
+  app.get(
+    "/api/playlists/:playlistId/search",
+    authenticated(dependencies.validateAccessContext),
+    async (req: Request<{ playlistId: string }>, res: Response<unknown, Locals>, next) => {
+      try {
+        const query = searchQuerySchema.parse(req.query);
+        const playlistId = asPlaylistId(req.params.playlistId);
+        const page = await dependencies.searchPlaylistItems.execute({
+          accessContext: res.locals.accessContext,
+          playlistId,
+          query: query.q,
+          page: query.page,
+          pageSize: query.pageSize
+        });
+
+        res.json(page);
+      } catch (error) {
+        next(error);
+      }
+    }
+  );
+
+  app.get(
+    "/api/playlists/:playlistId/categories",
+    authenticated(dependencies.validateAccessContext),
+    async (req: Request<{ playlistId: string }>, res: Response<unknown, Locals>, next) => {
+      try {
+        const playlistId = asPlaylistId(req.params.playlistId);
+        const categories = await dependencies.listPlaylistCategories.execute({
+          accessContext: res.locals.accessContext,
+          playlistId
+        });
+
+        res.json({ categories });
       } catch (error) {
         next(error);
       }
@@ -118,9 +165,9 @@ export const createApp = (dependencies: {
 
 const authenticated =
   (validateAccessContext: ValidateAccessContextService) =>
-  async (_req: Request, res: Response<unknown, Locals>, next: NextFunction) => {
+  async (req: Request, res: Response<unknown, Locals>, next: NextFunction) => {
     try {
-      const token = extractBearerToken(_req.headers.authorization);
+      const token = extractBearerToken(req.headers.authorization);
       res.locals.accessContext = await validateAccessContext.execute(token);
       next();
     } catch (error) {
@@ -140,4 +187,3 @@ const extractBearerToken = (headerValue?: string): string => {
 
   return token;
 };
-
