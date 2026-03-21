@@ -1,1 +1,0 @@
-# viseo-cache-gateway
