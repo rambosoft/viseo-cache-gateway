@@ -10,8 +10,11 @@
     "dev": "tsx watch src/bootstrap/server.ts",
     "worker": "tsx watch src/bootstrap/worker.ts",
     "build": "swc src -d dist --copy-files",
+    "start:server": "node dist/bootstrap/server.js",
+    "start:worker": "node dist/bootstrap/worker.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:performance": "vitest run --config vitest.performance.config.ts",
     "verify": "npm run typecheck && npm run test"
   },
   "dependencies": {

@@ -22,6 +22,7 @@ import { ValidateAccessContextService } from "../../src/application/services/Val
 import { createLogger } from "../../src/bootstrap/logger";
 import { NoopTelemetry } from "../../src/bootstrap/telemetry";
 import { InMemoryPlaylistRevisionJobQueue } from "./InMemoryPlaylistRevisionJobQueue";
+import { demoPlaylistFixture } from "./m3uFixture";
 
 export const token = "integration-test-token";
 export const playlistId = "pl_demo";
@@ -39,24 +40,18 @@ export type TestAppContext = {
   close(): Promise<void>;
 };
 
-export const createTestApp = async (): Promise<TestAppContext> => {
+export const createTestApp = async (options?: {
+  playlistContent?: string;
+}): Promise<TestAppContext> => {
   let primaryValidationCount = 0;
   let playlistFetchCount = 0;
+
+  const playlistContent = options?.playlistContent ?? demoPlaylistFixture;
 
   const playlistServer = createServer((_req, res) => {
     playlistFetchCount += 1;
     res.writeHead(200, { "content-type": "application/x-mpegURL" });
-    res.end(
-      [
-        "#EXTM3U",
-        '#EXTINF:-1 tvg-name="Alpha Channel" group-title="Live" tvg-logo="https://img.example/alpha.png",Alpha Channel',
-        "http://stream.example/live/alpha",
-        '#EXTINF:-1 tvg-name="Bravo Movie" group-title="Movies",Bravo Movie',
-        "http://stream.example/vod/bravo.mp4",
-        '#EXTINF:-1 tvg-name="Charlie Series" group-title="Series",Charlie Series',
-        "http://stream.example/series/charlie"
-      ].join("\n")
-    );
+    res.end(playlistContent);
   });
   playlistServer.listen(0, "127.0.0.1");
   await once(playlistServer, "listening");
