@@ -20,6 +20,8 @@ describe("playlist detail e2e", () => {
   });
 
   it("returns limited M3U detail from the active playlist revision", async () => {
+    await queueAndBuildRevision(context);
+
     const pageResponse = await request(context.app)
       .get(`/api/playlists/${playlistId}/items`)
       .query({ page: 1, pageSize: 1 })
@@ -45,6 +47,8 @@ describe("playlist detail e2e", () => {
   });
 
   it("returns not found when the item is missing from the active revision", async () => {
+    await queueAndBuildRevision(context);
+
     const response = await request(context.app)
       .get(`/api/playlists/${playlistId}/items/not-real-item/detail`)
       .set("Authorization", `Bearer ${token}`)
@@ -53,3 +57,13 @@ describe("playlist detail e2e", () => {
     expect(response.body.error.code).toBe("not_found");
   });
 });
+
+const queueAndBuildRevision = async (context: TestAppContext): Promise<void> => {
+  await request(context.app)
+    .get(`/api/playlists/${playlistId}/items`)
+    .query({ page: 1, pageSize: 1 })
+    .set("Authorization", `Bearer ${token}`)
+    .expect(503);
+
+  await context.jobs.drain();
+};

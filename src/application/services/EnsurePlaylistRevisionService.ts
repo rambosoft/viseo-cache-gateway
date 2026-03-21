@@ -1,16 +1,14 @@
-import { randomUUID } from "node:crypto";
-
 import type { AccessContext } from "../../core/access/models";
-import type { PlaylistDescriptor } from "../../core/access/models";
-import { asRevisionId, type PlaylistId } from "../../core/shared/brands";
+import type { PlaylistRevisionJob } from "../../core/jobs/playlistRevisionJob";
+import type { PlaylistId } from "../../core/shared/brands";
 import { authorizationFailed, revisionNotReady } from "../../core/shared/errors";
 import type { CatalogRevisionStorePort } from "../../ports/catalog/CatalogRevisionStorePort";
-import type { PlaylistIngestionPort } from "../../ports/catalog/PlaylistIngestionPort";
+import type { PlaylistRevisionJobQueuePort } from "../../ports/jobs/PlaylistRevisionJobQueuePort";
 
 export class EnsurePlaylistRevisionService {
   public constructor(
     private readonly revisionStore: CatalogRevisionStorePort,
-    private readonly ingestionPorts: readonly PlaylistIngestionPort[]
+    private readonly revisionJobQueue: PlaylistRevisionJobQueuePort
   ) {}
 
   public async execute(accessContext: AccessContext, playlistId: PlaylistId): Promise<void> {
@@ -28,29 +26,25 @@ export class EnsurePlaylistRevisionService {
       return;
     }
 
-    const ingestionPort = this.resolveIngestionPort(playlist);
-    const snapshot = await ingestionPort.ingest({
-      tenantId: accessContext.tenantId,
-      playlist,
-      revisionId: asRevisionId(randomUUID())
-    });
+    const result = await this.revisionJobQueue.enqueue(this.toMissingRevisionJob(accessContext, playlist));
 
-    if (snapshot.items.length === 0) {
-      throw revisionNotReady("Playlist ingestion produced no items");
+    if (result === "already_queued") {
+      throw revisionNotReady("Playlist revision build is already queued");
     }
 
-    await this.revisionStore.activateRevision(snapshot);
+    throw revisionNotReady("Playlist revision build has been queued");
   }
 
-  private resolveIngestionPort(playlist: PlaylistDescriptor): PlaylistIngestionPort {
-    const ingestionPort = this.ingestionPorts.find((candidate) =>
-      candidate.supports(playlist.sourceType)
-    );
-
-    if (ingestionPort === undefined) {
-      throw revisionNotReady(`No ingestion adapter registered for ${playlist.sourceType}`);
-    }
-
-    return ingestionPort;
+  private toMissingRevisionJob(
+    accessContext: AccessContext,
+    playlist: AccessContext["playlists"][number]
+  ): PlaylistRevisionJob {
+    return {
+      tenantId: accessContext.tenantId,
+      principalId: accessContext.principalId,
+      playlist,
+      requestedAt: new Date().toISOString(),
+      reason: "missing_revision"
+    };
   }
 }

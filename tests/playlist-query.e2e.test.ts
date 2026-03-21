@@ -1,4 +1,4 @@
-﻿import request from "supertest";
+import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -19,7 +19,28 @@ describe("playlist query e2e", () => {
     await context.close();
   });
 
-  it("ingests the playlist on first access and paginates items from the active revision", async () => {
+  it("queues a background revision build on first access and serves paginated items after the worker activates it", async () => {
+    const initialResponse = await request(context.app)
+      .get(`/api/playlists/${playlistId}/items`)
+      .query({ page: 1, pageSize: 2 })
+      .set("Authorization", `Bearer ${token}`)
+      .expect(503);
+
+    expect(initialResponse.body.error.code).toBe("revision_not_ready");
+    expect(context.stats.getPrimaryValidationCount()).toBe(1);
+    expect(context.stats.getPlaylistFetchCount()).toBe(0);
+    expect(context.stats.getPendingBuildCount()).toBe(1);
+
+    await request(context.app)
+      .get(`/api/playlists/${playlistId}/items`)
+      .query({ page: 1, pageSize: 2 })
+      .set("Authorization", `Bearer ${token}`)
+      .expect(503);
+
+    expect(context.stats.getPendingBuildCount()).toBe(1);
+
+    await context.jobs.drain();
+
     const firstPage = await request(context.app)
       .get(`/api/playlists/${playlistId}/items`)
       .query({ page: 1, pageSize: 2 })
@@ -39,9 +60,12 @@ describe("playlist query e2e", () => {
     expect(secondPage.body.items[0].title).toBe("Charlie Series");
     expect(context.stats.getPrimaryValidationCount()).toBe(1);
     expect(context.stats.getPlaylistFetchCount()).toBe(1);
+    expect(context.stats.getPendingBuildCount()).toBe(0);
   });
 
   it("searches within the active playlist revision", async () => {
+    await queueAndBuildRevision(context);
+
     const response = await request(context.app)
       .get(`/api/playlists/${playlistId}/search`)
       .query({ q: "charlie series", page: 1, pageSize: 10 })
@@ -57,6 +81,8 @@ describe("playlist query e2e", () => {
   });
 
   it("returns category summaries for the active playlist revision", async () => {
+    await queueAndBuildRevision(context);
+
     const response = await request(context.app)
       .get(`/api/playlists/${playlistId}/categories`)
       .set("Authorization", `Bearer ${token}`)
@@ -78,5 +104,16 @@ describe("playlist query e2e", () => {
       .expect(403);
 
     expect(response.body.error.code).toBe("authorization_failed");
+    expect(context.stats.getPendingBuildCount()).toBe(0);
   });
 });
+
+const queueAndBuildRevision = async (context: TestAppContext): Promise<void> => {
+  await request(context.app)
+    .get(`/api/playlists/${playlistId}/items`)
+    .query({ page: 1, pageSize: 1 })
+    .set("Authorization", `Bearer ${token}`)
+    .expect(503);
+
+  await context.jobs.drain();
+};

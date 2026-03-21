@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import { RedisAccessContextStore } from "../adapters/cache-redis/RedisAccessContextStore";
 import { RedisCatalogRevisionStore } from "../adapters/cache-redis/RedisCatalogRevisionStore";
 import { createApp } from "../adapters/http-express/createApp";
-import { M3uPlaylistIngestionAdapter } from "../adapters/source-m3u/M3uPlaylistIngestionAdapter";
+import { BullMqPlaylistRevisionJobQueue } from "../adapters/jobs-bullmq/BullMqPlaylistRevisionJobQueue";
 import { M3uPlaylistItemDetailAdapter } from "../adapters/source-m3u/M3uPlaylistItemDetailAdapter";
 import { HttpPrimaryServerClient } from "../adapters/source-primary-server/HttpPrimaryServerClient";
 import { GetPlaylistItemDetailService } from "../application/services/GetPlaylistItemDetailService";
@@ -31,18 +31,21 @@ const bootstrap = async (): Promise<void> => {
     timeoutMs: config.upstreamTimeoutMs,
     logger
   });
-  const ingestionAdapter = new M3uPlaylistIngestionAdapter({
-    timeoutMs: config.upstreamTimeoutMs,
+  const m3uPlaylistItemDetail = new M3uPlaylistItemDetailAdapter();
+  const revisionJobQueue = new BullMqPlaylistRevisionJobQueue({
+    redisUrl: config.redisUrl,
+    prefix: config.bullmqPrefix,
+    queueName: config.playlistRevisionQueueName,
     logger
   });
-  const m3uPlaylistItemDetail = new M3uPlaylistItemDetailAdapter();
   const validateAccessContext = new ValidateAccessContextService(
     accessContextCache,
     primaryServer
   );
-  const ensurePlaylistRevision = new EnsurePlaylistRevisionService(revisionStore, [
-    ingestionAdapter
-  ]);
+  const ensurePlaylistRevision = new EnsurePlaylistRevisionService(
+    revisionStore,
+    revisionJobQueue
+  );
   const telemetry = new NoopTelemetry();
   const listPlaylistItems = new ListPlaylistItemsService(
     ensurePlaylistRevision,
@@ -78,6 +81,10 @@ const bootstrap = async (): Promise<void> => {
   const server = createServer(app);
   server.listen(config.port, () => {
     logger.info("HTTP server listening", { port: config.port });
+    logger.info("Playlist revision worker must run separately", {
+      queueName: config.playlistRevisionQueueName,
+      queuePrefix: config.bullmqPrefix
+    });
   });
 
   const close = async (): Promise<void> => {
@@ -90,6 +97,7 @@ const bootstrap = async (): Promise<void> => {
         resolve();
       });
     });
+    await revisionJobQueue.close();
     await redis.quit();
   };
 

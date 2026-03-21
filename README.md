@@ -12,6 +12,14 @@ Implemented slices:
 - playlist-scoped search over active revision data
 - playlist-scoped category summaries over active revision data
 - playlist-scoped item detail with limited M3U detail responses
+- background revision rebuild queue with BullMQ-backed runtime adapters
+
+Behavior notes:
+
+- Authenticated read requests no longer ingest playlists inline when no active revision exists.
+- The first read for a missing playlist revision queues a rebuild job and returns `503 revision_not_ready`.
+- A separate worker process consumes the queued rebuild and activates the revision.
+- Once the revision is active, the same read routes serve cached data from Redis.
 
 Key docs:
 
@@ -25,4 +33,6 @@ Useful commands:
 npm run typecheck
 npm run test
 npm run build
+npm run dev
+npm run worker
 ```

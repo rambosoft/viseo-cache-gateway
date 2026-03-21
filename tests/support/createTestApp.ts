@@ -9,6 +9,7 @@ import { createApp } from "../../src/adapters/http-express/createApp";
 import { M3uPlaylistIngestionAdapter } from "../../src/adapters/source-m3u/M3uPlaylistIngestionAdapter";
 import { M3uPlaylistItemDetailAdapter } from "../../src/adapters/source-m3u/M3uPlaylistItemDetailAdapter";
 import { HttpPrimaryServerClient } from "../../src/adapters/source-primary-server/HttpPrimaryServerClient";
+import { BuildPlaylistRevisionService } from "../../src/application/services/BuildPlaylistRevisionService";
 import { GetPlaylistItemDetailService } from "../../src/application/services/GetPlaylistItemDetailService";
 import { ListPlaylistCategoriesService } from "../../src/application/services/ListPlaylistCategoriesService";
 import { EnsurePlaylistRevisionService } from "../../src/application/services/EnsurePlaylistRevisionService";
@@ -17,6 +18,7 @@ import { SearchPlaylistItemsService } from "../../src/application/services/Searc
 import { ValidateAccessContextService } from "../../src/application/services/ValidateAccessContextService";
 import { createLogger } from "../../src/bootstrap/logger";
 import { NoopTelemetry } from "../../src/bootstrap/telemetry";
+import { InMemoryPlaylistRevisionJobQueue } from "./InMemoryPlaylistRevisionJobQueue";
 
 export const token = "integration-test-token";
 export const playlistId = "pl_demo";
@@ -26,6 +28,10 @@ export type TestAppContext = {
   stats: {
     getPrimaryValidationCount(): number;
     getPlaylistFetchCount(): number;
+    getPendingBuildCount(): number;
+  };
+  jobs: {
+    drain(): Promise<void>;
   };
   close(): Promise<void>;
 };
@@ -100,14 +106,22 @@ export const createTestApp = async (): Promise<TestAppContext> => {
     logger
   });
   const m3uPlaylistItemDetail = new M3uPlaylistItemDetailAdapter();
+  const revisionJobQueue = new InMemoryPlaylistRevisionJobQueue();
   const validateAccessContext = new ValidateAccessContextService(
     accessContextCache,
     primaryServerClient
   );
-  const ensurePlaylistRevision = new EnsurePlaylistRevisionService(revisionStore, [
-    ingestionAdapter
-  ]);
+  const ensurePlaylistRevision = new EnsurePlaylistRevisionService(
+    revisionStore,
+    revisionJobQueue
+  );
   const telemetry = new NoopTelemetry();
+  const buildPlaylistRevision = new BuildPlaylistRevisionService(
+    revisionStore,
+    [ingestionAdapter],
+    logger,
+    telemetry
+  );
   const listPlaylistItems = new ListPlaylistItemsService(
     ensurePlaylistRevision,
     revisionStore,
@@ -141,7 +155,13 @@ export const createTestApp = async (): Promise<TestAppContext> => {
     }),
     stats: {
       getPrimaryValidationCount: () => primaryValidationCount,
-      getPlaylistFetchCount: () => playlistFetchCount
+      getPlaylistFetchCount: () => playlistFetchCount,
+      getPendingBuildCount: () => revisionJobQueue.getPendingCount()
+    },
+    jobs: {
+      drain: async () => {
+        await revisionJobQueue.drain((job) => buildPlaylistRevision.execute(job));
+      }
     },
     close: async () => {
       await Promise.all([closeServer(primaryServer), closeServer(playlistServer)]);
