@@ -1,4 +1,4 @@
-import { Queue } from "bullmq";
+import { Queue, type JobType } from "bullmq";
 
 import {
   parsePlaylistRevisionJob,
@@ -69,6 +69,10 @@ export class BullMqPlaylistRevisionJobQueue implements PlaylistRevisionJobQueueP
       });
       throw upstreamUnavailable("Playlist revision queue is unavailable");
     }
+  }
+
+  public async getJobCounts(...types: JobType[]): Promise<Record<string, number>> {
+    return this.queue.getJobCounts(...types);
   }
 
   public async close(): Promise<void> {

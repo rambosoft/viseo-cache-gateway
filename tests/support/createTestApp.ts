@@ -6,11 +6,14 @@ import Redis from "ioredis-mock";
 import { RedisAccessContextStore } from "../../src/adapters/cache-redis/RedisAccessContextStore";
 import { RedisCatalogRevisionStore } from "../../src/adapters/cache-redis/RedisCatalogRevisionStore";
 import { createApp } from "../../src/adapters/http-express/createApp";
+import { PlaylistRevisionQueueHealthProbe } from "../../src/adapters/platform/PlaylistRevisionQueueHealthProbe";
+import { RedisHealthProbe } from "../../src/adapters/platform/RedisHealthProbe";
 import { M3uPlaylistIngestionAdapter } from "../../src/adapters/source-m3u/M3uPlaylistIngestionAdapter";
 import { M3uPlaylistItemDetailAdapter } from "../../src/adapters/source-m3u/M3uPlaylistItemDetailAdapter";
 import { HttpPrimaryServerClient } from "../../src/adapters/source-primary-server/HttpPrimaryServerClient";
 import { BuildPlaylistRevisionService } from "../../src/application/services/BuildPlaylistRevisionService";
 import { GetPlaylistItemDetailService } from "../../src/application/services/GetPlaylistItemDetailService";
+import { GetServiceHealthService } from "../../src/application/services/health/GetServiceHealthService";
 import { ListPlaylistCategoriesService } from "../../src/application/services/ListPlaylistCategoriesService";
 import { EnsurePlaylistRevisionService } from "../../src/application/services/EnsurePlaylistRevisionService";
 import { ListPlaylistItemsService } from "../../src/application/services/ListPlaylistItemsService";
@@ -92,6 +95,7 @@ export const createTestApp = async (): Promise<TestAppContext> => {
 
   const keyPrefix = `cg_test_${Date.now()}_${Math.random().toString(16).slice(2)}`;
   const logger = createLogger("silent");
+  const telemetry = new NoopTelemetry();
   const redis = new Redis();
   const accessContextCache = new RedisAccessContextStore(redis, keyPrefix);
   const revisionStore = new RedisCatalogRevisionStore(redis, keyPrefix);
@@ -107,6 +111,10 @@ export const createTestApp = async (): Promise<TestAppContext> => {
   });
   const m3uPlaylistItemDetail = new M3uPlaylistItemDetailAdapter();
   const revisionJobQueue = new InMemoryPlaylistRevisionJobQueue();
+  const getServiceHealth = new GetServiceHealthService([
+    new RedisHealthProbe(redis),
+    new PlaylistRevisionQueueHealthProbe(revisionJobQueue)
+  ]);
   const validateAccessContext = new ValidateAccessContextService(
     accessContextCache,
     primaryServerClient
@@ -115,7 +123,6 @@ export const createTestApp = async (): Promise<TestAppContext> => {
     revisionStore,
     revisionJobQueue
   );
-  const telemetry = new NoopTelemetry();
   const buildPlaylistRevision = new BuildPlaylistRevisionService(
     revisionStore,
     [ingestionAdapter],
@@ -147,6 +154,8 @@ export const createTestApp = async (): Promise<TestAppContext> => {
   return {
     app: createApp({
       logger,
+      telemetry,
+      getServiceHealth,
       validateAccessContext,
       listPlaylistItems,
       searchPlaylistItems,

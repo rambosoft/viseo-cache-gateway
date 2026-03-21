@@ -4,9 +4,12 @@ import { RedisAccessContextStore } from "../adapters/cache-redis/RedisAccessCont
 import { RedisCatalogRevisionStore } from "../adapters/cache-redis/RedisCatalogRevisionStore";
 import { createApp } from "../adapters/http-express/createApp";
 import { BullMqPlaylistRevisionJobQueue } from "../adapters/jobs-bullmq/BullMqPlaylistRevisionJobQueue";
+import { PlaylistRevisionQueueHealthProbe } from "../adapters/platform/PlaylistRevisionQueueHealthProbe";
+import { RedisHealthProbe } from "../adapters/platform/RedisHealthProbe";
 import { M3uPlaylistItemDetailAdapter } from "../adapters/source-m3u/M3uPlaylistItemDetailAdapter";
 import { HttpPrimaryServerClient } from "../adapters/source-primary-server/HttpPrimaryServerClient";
 import { GetPlaylistItemDetailService } from "../application/services/GetPlaylistItemDetailService";
+import { GetServiceHealthService } from "../application/services/health/GetServiceHealthService";
 import { ListPlaylistCategoriesService } from "../application/services/ListPlaylistCategoriesService";
 import { EnsurePlaylistRevisionService } from "../application/services/EnsurePlaylistRevisionService";
 import { ListPlaylistItemsService } from "../application/services/ListPlaylistItemsService";
@@ -15,11 +18,12 @@ import { ValidateAccessContextService } from "../application/services/ValidateAc
 import { loadConfig } from "../config/env";
 import { createLogger } from "./logger";
 import { createRedis } from "./redis";
-import { NoopTelemetry } from "./telemetry";
+import { StructuredTelemetry } from "./telemetry";
 
 const bootstrap = async (): Promise<void> => {
   const config = loadConfig();
   const logger = createLogger(config.logLevel);
+  const telemetry = new StructuredTelemetry(logger.child({ component: "telemetry" }));
   const redis = createRedis(config.redisUrl);
   await redis.connect();
 
@@ -38,6 +42,10 @@ const bootstrap = async (): Promise<void> => {
     queueName: config.playlistRevisionQueueName,
     logger
   });
+  const getServiceHealth = new GetServiceHealthService([
+    new RedisHealthProbe(redis),
+    new PlaylistRevisionQueueHealthProbe(revisionJobQueue)
+  ]);
   const validateAccessContext = new ValidateAccessContextService(
     accessContextCache,
     primaryServer
@@ -46,7 +54,6 @@ const bootstrap = async (): Promise<void> => {
     revisionStore,
     revisionJobQueue
   );
-  const telemetry = new NoopTelemetry();
   const listPlaylistItems = new ListPlaylistItemsService(
     ensurePlaylistRevision,
     revisionStore,
@@ -71,6 +78,8 @@ const bootstrap = async (): Promise<void> => {
 
   const app = createApp({
     logger,
+    telemetry,
+    getServiceHealth,
     validateAccessContext,
     listPlaylistItems,
     searchPlaylistItems,

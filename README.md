@@ -13,6 +13,7 @@ Implemented slices:
 - playlist-scoped category summaries over active revision data
 - playlist-scoped item detail with limited M3U detail responses
 - background revision rebuild queue with BullMQ-backed runtime adapters
+- readiness-aware health reporting, structured request telemetry, and rebuild failure coverage
 
 Behavior notes:
 
@@ -20,6 +21,8 @@ Behavior notes:
 - The first read for a missing playlist revision queues a rebuild job and returns `503 revision_not_ready`.
 - A separate worker process consumes the queued rebuild and activates the revision.
 - Once the revision is active, the same read routes serve cached data from Redis.
+- `/health` now reports dependency readiness for Redis and the playlist-revision queue.
+- Failed rebuilds do not replace a healthy active revision.
 
 Key docs:
 

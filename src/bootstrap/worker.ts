@@ -5,11 +5,12 @@ import { BuildPlaylistRevisionService } from "../application/services/BuildPlayl
 import { loadConfig } from "../config/env";
 import { createLogger } from "./logger";
 import { createRedis } from "./redis";
-import { NoopTelemetry } from "./telemetry";
+import { StructuredTelemetry } from "./telemetry";
 
 const bootstrap = async (): Promise<void> => {
   const config = loadConfig();
   const logger = createLogger(config.logLevel);
+  const telemetry = new StructuredTelemetry(logger.child({ component: "telemetry" }));
   const redis = createRedis(config.redisUrl);
   await redis.connect();
 
@@ -18,7 +19,6 @@ const bootstrap = async (): Promise<void> => {
     timeoutMs: config.upstreamTimeoutMs,
     logger
   });
-  const telemetry = new NoopTelemetry();
   const buildPlaylistRevision = new BuildPlaylistRevisionService(
     revisionStore,
     [ingestionAdapter],

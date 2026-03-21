@@ -1,3 +1,5 @@
+import type { JobType } from "bullmq";
+
 import {
   parsePlaylistRevisionJob,
   serializePlaylistRevisionJob,
@@ -22,6 +24,12 @@ export class InMemoryPlaylistRevisionJobQueue implements PlaylistRevisionJobQueu
 
   public getPendingCount(): number {
     return this.pending.size;
+  }
+
+  public async getJobCounts(...types: JobType[]): Promise<Record<string, number>> {
+    return Object.fromEntries(
+      types.map((type) => [type, type === "waiting" ? this.pending.size : 0])
+    );
   }
 
   public async drain(processJob: (job: PlaylistRevisionJob) => Promise<void>): Promise<void> {

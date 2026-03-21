@@ -4,6 +4,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { z } from "zod";
 
 import { GetPlaylistItemDetailService } from "../../application/services/GetPlaylistItemDetailService";
+import { GetServiceHealthService } from "../../application/services/health/GetServiceHealthService";
 import { ListPlaylistCategoriesService } from "../../application/services/ListPlaylistCategoriesService";
 import { ListPlaylistItemsService } from "../../application/services/ListPlaylistItemsService";
 import { SearchPlaylistItemsService } from "../../application/services/SearchPlaylistItemsService";
@@ -12,6 +13,7 @@ import type { AccessContext } from "../../core/access/models";
 import { asItemId, asPlaylistId } from "../../core/shared/brands";
 import { AppError, authenticationFailed, validationFailed } from "../../core/shared/errors";
 import type { LoggerPort } from "../../ports/platform/LoggerPort";
+import type { TelemetryPort } from "../../ports/platform/TelemetryPort";
 
 const paginationQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
@@ -26,10 +28,13 @@ type Locals = {
   accessContext: AccessContext;
   requestId: string;
   logger: LoggerPort;
+  startedAt: number;
 };
 
 export const createApp = (dependencies: {
   logger: LoggerPort;
+  telemetry: TelemetryPort;
+  getServiceHealth: GetServiceHealthService;
   validateAccessContext: ValidateAccessContextService;
   listPlaylistItems: ListPlaylistItemsService;
   searchPlaylistItems: SearchPlaylistItemsService;
@@ -41,15 +46,34 @@ export const createApp = (dependencies: {
   app.use((req: Request, res: Response<unknown, Locals>, next: NextFunction) => {
     const requestId = randomUUID();
     res.locals.requestId = requestId;
+    res.locals.startedAt = Date.now();
     res.locals.logger = dependencies.logger.child({ requestId });
+
+    res.on("finish", () => {
+      const durationMs = Date.now() - res.locals.startedAt;
+      dependencies.telemetry.recordDuration("http.request", durationMs, {
+        method: req.method,
+        route: req.route?.path ?? req.path,
+        statusCode: res.statusCode
+      });
+      res.locals.logger.info("HTTP request completed", {
+        method: req.method,
+        path: req.originalUrl,
+        statusCode: res.statusCode,
+        durationMs
+      });
+    });
+
     next();
   });
 
-  app.get("/health", (_req, res) => {
-    res.json({
-      status: "ok",
-      uptimeSeconds: process.uptime()
-    });
+  app.get("/health", async (_req, res, next) => {
+    try {
+      const report = await dependencies.getServiceHealth.execute();
+      res.status(report.status === "ok" ? 200 : 503).json(report);
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.get(
