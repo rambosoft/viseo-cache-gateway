@@ -28,6 +28,13 @@
 - Confirmed: API route changes must update both `22-api-contracts.md` and `src/adapters/http-express/openapi/`.
 - Confirmed: OpenAPI content is owned at the HTTP adapter edge and must not leak documentation concerns into core or application modules.
 
+## Local Validation Rules
+
+- Confirmed: `.env.example` is the canonical starter for local runtime configuration.
+- Confirmed: `scripts/manual-test-fixtures/` is the supported local harness for fake primary-server and source-provider flows.
+- Confirmed: `docker-compose.yml` is the supported local orchestration entrypoint for Redis plus the containerized server/worker/fixture stack.
+- Confirmed: If local fixture behavior changes, update both the fixture README and the relevant `.ai` docs so future agents do not guess the manual validation path.
+
 ## Redis Rules
 
 - Proposed: Keys must be tenant-prefixed, schema-versioned, and revision-aware.

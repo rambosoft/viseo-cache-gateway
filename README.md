@@ -46,6 +46,7 @@ npm run typecheck
 npm run test
 npm run test:performance
 npm run build
+npm run fixtures:manual
 npm run dev
 npm run worker
 npm run start:server
@@ -57,11 +58,85 @@ Runtime:
 - This repository is aligned to Node.js `24.x`.
 - Use Node 24 for local development, CI, and container runtime verification.
 - Optional event-loop profiling is controlled by `ENABLE_EVENT_LOOP_PROFILING` and `EVENT_LOOP_PROFILING_INTERVAL_MS`.
+- Local development can load configuration from a root `.env` file.
+
+Manual local testing:
+
+1. Copy `.env.example` to `.env`.
+2. Start Redis locally.
+   - Start only Redis with Docker Compose:
+
+```bash
+docker compose up -d redis
+```
+
+   - Or start Redis directly if it is installed:
+
+```bash
+redis-server
+```
+
+3. Start the fixture harness:
+
+```bash
+npm run fixtures:manual
+```
+
+4. Start the HTTP server:
+
+```bash
+npm run dev
+```
+
+5. Start the worker in a second terminal:
+
+```bash
+npm run worker
+```
+
+6. Open:
+
+```text
+http://127.0.0.1:3000/docs/
+http://127.0.0.1:3000/openapi.json
+http://127.0.0.1:3000/health
+```
+
+7. Use the printed bearer token and playlist id from the fixture harness to call authenticated routes.
+8. For detail requests, first call `/api/playlists/:playlistId/items` or `/search` and copy the returned `itemId`.
+   - `itemId` is a gateway-generated opaque identifier.
+   - Do not substitute fixture labels like `item_demo_1` or source-native provider IDs.
+
+Fixture harness docs:
+
+- `scripts/manual-test-fixtures/README.md`
+- In Docker Compose, fixture upstreams are advertised as `fixtures`, not `127.0.0.1`, so sibling containers can reach them correctly.
 
 Docker:
 
 ```bash
 docker build -t cache-gateway .
+```
+
+Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+This starts:
+
+- `redis`
+- `fixtures`
+- `server`
+- `worker`
+
+The server is then available at:
+
+```text
+http://127.0.0.1:3000/docs/
+http://127.0.0.1:3000/openapi.json
+http://127.0.0.1:3000/health
 ```
 
 Run the HTTP server container:

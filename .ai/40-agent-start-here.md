@@ -40,4 +40,6 @@
 - Confirmed: If you change any public HTTP route or response shape, update `src/adapters/http-express/openapi/` and keep `/openapi.json` aligned with `22-api-contracts.md`.
 - Confirmed: Check tenant and revision rules in `04-architecture-overview.md` and `16-integration-rules.md`.
 - Confirmed: Check scope boundaries in `02-scope-mvp-vs-post-mvp.md`.
+- Confirmed: For local manual validation, start from `.env.example` and `scripts/manual-test-fixtures/README.md` rather than inventing ad hoc fixture flows.
+- Confirmed: For local container orchestration, use `docker-compose.yml` as the canonical entrypoint rather than inventing one-off Redis or app container commands.
 - Proposed: If needed, consult `decision-register.md` and `source-map.md` before reading a historical source file.

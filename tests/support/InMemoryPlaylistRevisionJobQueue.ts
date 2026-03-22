@@ -51,6 +51,12 @@ export class InMemoryPlaylistRevisionJobQueue implements PlaylistRevisionJobQueu
   }
 
   private jobId(job: PlaylistRevisionJob): string {
-    return `tenant:${job.tenantId}:playlist:${job.playlist.playlistId}:build`;
+    return [
+      "tenant",
+      encodeURIComponent(job.tenantId),
+      "playlist",
+      encodeURIComponent(job.playlist.playlistId),
+      "build"
+    ].join("__");
   }
 }

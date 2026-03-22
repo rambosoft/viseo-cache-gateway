@@ -1,3 +1,6 @@
+export const exampleM3uFixtureItemId =
+  "b231f9d039b515688beee55b9ca8569004a714d2ec60b68783b63eb1e1607940" as const;
+
 export const exampleAccessContextResponse = {
   principalId: "principal_demo",
   tenantId: "tenant_demo",
@@ -16,22 +19,18 @@ export const exampleAccessContextResponse = {
 } as const;
 
 export const exampleItemSummary = {
-  itemId: "item_demo_1",
+  itemId: exampleM3uFixtureItemId,
   playlistId: "pl_demo",
-  sourceType: "xtream",
-  mediaType: "vod",
-  title: "Example Movie",
-  categoryKey: "movies",
-  categoryLabel: "Movies",
-  sortAddedAt: 1711094400,
-  sortRating: 8.7,
-  releaseYear: 2024,
-  iconUrl: "https://cdn.example.com/posters/example-movie.jpg",
-  tags: ["featured", "action"],
+  sourceType: "m3u",
+  mediaType: "live",
+  title: "Alpha Channel",
+  categoryKey: "live",
+  categoryLabel: "Live",
+  sortAddedAt: 1774141412733,
+  iconUrl: "https://img.example/alpha.png",
+  tags: ["Live"],
   sourceNative: {
-    stream_id: 1001,
-    container_extension: "mp4",
-    is_adult: false
+    streamUrl: "http://stream.example/live/alpha"
   }
 } as const;
 
@@ -66,7 +65,7 @@ export const exampleCategoriesResponse = {
 
 export const exampleXtreamItemDetail = {
   item: {
-    itemId: "item_demo_1",
+    itemId: "xtream_vod_101",
     playlistId: "pl_demo",
     sourceType: "xtream",
     mediaType: "vod",
@@ -96,19 +95,18 @@ export const exampleXtreamItemDetail = {
 
 export const exampleM3uItemDetail = {
   item: {
-    itemId: "item_demo_2",
+    itemId: exampleM3uFixtureItemId,
     playlistId: "pl_demo",
     sourceType: "m3u",
     mediaType: "live",
-    title: "Example News Channel",
-    categoryKey: "news",
-    categoryLabel: "News",
-    iconUrl: "https://cdn.example.com/logos/news-channel.png",
-    tags: ["live", "news"]
+    title: "Alpha Channel",
+    categoryKey: "live",
+    categoryLabel: "Live",
+    iconUrl: "https://img.example/alpha.png",
+    tags: ["Live"]
   },
   sourceNative: {
-    tvg_id: "news.channel",
-    group_title: "News"
+    streamUrl: "http://stream.example/live/alpha"
   },
   detailAvailability: "limited",
   note: "M3U detail is limited to normalized summary fields and source-native metadata."

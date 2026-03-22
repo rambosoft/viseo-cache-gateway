@@ -42,8 +42,13 @@ export class BullMqPlaylistRevisionJobQueue implements PlaylistRevisionJobQueueP
 
     try {
       const existing = await this.queue.getJob(jobId);
-      if (existing !== null) {
-        return "already_queued";
+      if (existing != null) {
+        const state = await existing.getState();
+        if (this.isInFlightState(state)) {
+          return "already_queued";
+        }
+
+        await existing.remove();
       }
 
       await this.queue.add("build_playlist_revision", serializePlaylistRevisionJob(payload), {
@@ -80,6 +85,22 @@ export class BullMqPlaylistRevisionJobQueue implements PlaylistRevisionJobQueueP
   }
 
   private jobId(job: PlaylistRevisionJob): string {
-    return `tenant:${job.tenantId}:playlist:${job.playlist.playlistId}:build`;
+    return [
+      "tenant",
+      encodeURIComponent(job.tenantId),
+      "playlist",
+      encodeURIComponent(job.playlist.playlistId),
+      "build"
+    ].join("__");
+  }
+
+  private isInFlightState(state: string): boolean {
+    return (
+      state === "waiting" ||
+      state === "active" ||
+      state === "delayed" ||
+      state === "prioritized" ||
+      state === "waiting-children"
+    );
   }
 }

@@ -1,0 +1,101 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1000"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  fixtures:
+    build:
+      context: .
+    restart: unless-stopped
+    environment:
+      APP_ROLE: fixtures
+      MANUAL_FIXTURE_SOURCE_TYPE: ${MANUAL_FIXTURE_SOURCE_TYPE:-m3u}
+      MANUAL_FIXTURE_PRIMARY_PORT: 4000
+      MANUAL_FIXTURE_SOURCE_PORT: 5000
+      MANUAL_FIXTURE_BIND_HOST: 0.0.0.0
+      MANUAL_FIXTURE_ADVERTISED_HOST: fixtures
+      MANUAL_FIXTURE_PLAYLIST_ID: ${MANUAL_FIXTURE_PLAYLIST_ID:-pl_demo}
+      MANUAL_FIXTURE_PLAYLIST_NAME: ${MANUAL_FIXTURE_PLAYLIST_NAME:-Demo Playlist}
+      MANUAL_FIXTURE_TOKEN: ${MANUAL_FIXTURE_TOKEN:-demo-token}
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4000/validate', { method: 'POST' }).then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: .
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      fixtures:
+        condition: service_healthy
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      APP_ROLE: server
+      NODE_ENV: production
+      PORT: 3000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      REDIS_URL: redis://redis:6379
+      REDIS_KEY_PREFIX: ${REDIS_KEY_PREFIX:-cg}
+      PRIMARY_SERVER_URL: http://fixtures:4000
+      PRIMARY_SERVER_VALIDATE_PATH: ${PRIMARY_SERVER_VALIDATE_PATH:-/validate}
+      UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:-5000}
+      PLAYLIST_REVISION_STALE_AFTER_MS: ${PLAYLIST_REVISION_STALE_AFTER_MS:-300000}
+      REVISION_RETAIN_COUNT: ${REVISION_RETAIN_COUNT:-2}
+      BULLMQ_PREFIX: ${BULLMQ_PREFIX:-cg:jobs}
+      PLAYLIST_REVISION_QUEUE_NAME: ${PLAYLIST_REVISION_QUEUE_NAME:-playlist-revision}
+      PLAYLIST_REVISION_WORKER_HEARTBEAT_INTERVAL_MS: ${PLAYLIST_REVISION_WORKER_HEARTBEAT_INTERVAL_MS:-5000}
+      PLAYLIST_REVISION_WORKER_HEARTBEAT_STALE_AFTER_MS: ${PLAYLIST_REVISION_WORKER_HEARTBEAT_STALE_AFTER_MS:-15000}
+      ENABLE_EVENT_LOOP_PROFILING: ${ENABLE_EVENT_LOOP_PROFILING:-false}
+      EVENT_LOOP_PROFILING_INTERVAL_MS: ${EVENT_LOOP_PROFILING_INTERVAL_MS:-30000}
+
+  worker:
+    build:
+      context: .
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      fixtures:
+        condition: service_healthy
+    environment:
+      APP_ROLE: worker
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      REDIS_URL: redis://redis:6379
+      REDIS_KEY_PREFIX: ${REDIS_KEY_PREFIX:-cg}
+      PRIMARY_SERVER_URL: http://fixtures:4000
+      PRIMARY_SERVER_VALIDATE_PATH: ${PRIMARY_SERVER_VALIDATE_PATH:-/validate}
+      UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:-5000}
+      PLAYLIST_REVISION_STALE_AFTER_MS: ${PLAYLIST_REVISION_STALE_AFTER_MS:-300000}
+      REVISION_RETAIN_COUNT: ${REVISION_RETAIN_COUNT:-2}
+      BULLMQ_PREFIX: ${BULLMQ_PREFIX:-cg:jobs}
+      PLAYLIST_REVISION_QUEUE_NAME: ${PLAYLIST_REVISION_QUEUE_NAME:-playlist-revision}
+      PLAYLIST_REVISION_WORKER_CONCURRENCY: ${PLAYLIST_REVISION_WORKER_CONCURRENCY:-2}
+      PLAYLIST_REVISION_WORKER_HEARTBEAT_INTERVAL_MS: ${PLAYLIST_REVISION_WORKER_HEARTBEAT_INTERVAL_MS:-5000}
+      PLAYLIST_REVISION_WORKER_HEARTBEAT_STALE_AFTER_MS: ${PLAYLIST_REVISION_WORKER_HEARTBEAT_STALE_AFTER_MS:-15000}
+      ENABLE_EVENT_LOOP_PROFILING: ${ENABLE_EVENT_LOOP_PROFILING:-false}
+      EVENT_LOOP_PROFILING_INTERVAL_MS: ${EVENT_LOOP_PROFILING_INTERVAL_MS:-30000}
+
+volumes:
+  redis-data:

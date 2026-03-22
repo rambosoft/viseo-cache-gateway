@@ -55,6 +55,7 @@
 ## Item Detail
 
 - Confirmed: `GET /api/playlists/:playlistId/items/:itemId/detail` is the canonical detail route.
+- Confirmed: `itemId` is an opaque gateway-generated identifier returned by the list/search APIs, not a source-native provider identifier and not a user-invented demo value.
 - Confirmed: Xtream-backed detail may call the source adapter and may use short-lived caching.
 - Confirmed: M3U-backed detail returns only available normalized summary data plus a note that source detail is limited.
 

@@ -39,7 +39,10 @@ src/
     telemetry/
   config/
   bootstrap/
-  tests/
+scripts/
+  manual-test-fixtures/
+docker/
+tests/
     unit/
     integration/
     contract/
@@ -53,6 +56,8 @@ src/
 - Confirmed: `application/` coordinates use cases and request-independent orchestration.
 - Confirmed: `adapters/` implements ports and owns framework or vendor-specific code.
 - Confirmed: `bootstrap/` wires the runtime graph and process lifecycle.
+- Confirmed: `scripts/manual-test-fixtures/` owns local-only fixture tooling for reproducible manual validation of auth and source flows.
+- Confirmed: `docker/` owns container entrypoint and deployment-supporting shell assets.
 - Confirmed: `adapters/http-express/openapi/` owns the OpenAPI document split by `document`, `paths`, `schemas`, `examples`, and `types`.
 - Proposed: Source-specific normalization helpers should stay close to their adapters, not in a global util bucket.
 

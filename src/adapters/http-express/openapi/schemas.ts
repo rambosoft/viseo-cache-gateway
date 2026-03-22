@@ -20,7 +20,7 @@ const itemSummarySchema = {
     itemId: {
       type: "string",
       description: "Stable item identifier within one playlist.",
-      example: "item_demo_1"
+      example: exampleItemSummary.itemId
     },
     playlistId: {
       type: "string",
@@ -323,7 +323,11 @@ export const openApiSchemas = {
         additionalProperties: false,
         required: ["itemId", "playlistId", "sourceType", "mediaType", "title", "tags"],
         properties: {
-          itemId: { type: "string", description: "Stable item identifier.", example: "item_demo_1" },
+          itemId: {
+            type: "string",
+            description: "Stable item identifier returned by list or search responses.",
+            example: exampleM3uItemDetail.item.itemId
+          },
           playlistId: { type: "string", description: "Owning playlist identifier.", example: "pl_demo" },
           sourceType: {
             type: "string",

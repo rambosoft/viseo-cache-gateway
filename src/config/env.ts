@@ -1,3 +1,6 @@
+import { resolve } from "node:path";
+
+import { config as loadDotenv } from "dotenv";
 import { z } from "zod";
 
 const environmentSchema = z.object({
@@ -42,7 +45,23 @@ export type AppConfig = Readonly<{
   eventLoopProfilingIntervalMs: number;
 }>;
 
+let environmentInitialized = false;
+
+export const initializeEnvironment = (cwd = process.cwd()): void => {
+  if (environmentInitialized) {
+    return;
+  }
+
+  loadDotenv({ path: resolve(cwd, ".env"), quiet: true });
+  environmentInitialized = true;
+};
+
+export const resetEnvironmentInitializationForTests = (): void => {
+  environmentInitialized = false;
+};
+
 export const loadConfig = (environment: NodeJS.ProcessEnv = process.env): AppConfig => {
+  initializeEnvironment();
   const parsed = environmentSchema.parse(environment);
 
   return {

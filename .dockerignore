@@ -4,5 +4,7 @@ coverage
 .git
 .vscode
 .ai
+.env
+tests
 *.log
 npm-debug.log*

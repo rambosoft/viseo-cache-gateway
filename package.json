@@ -12,6 +12,7 @@
     "build": "swc src -d dist --copy-files",
     "start:server": "node dist/src/bootstrap/server.js",
     "start:worker": "node dist/src/bootstrap/worker.js",
+    "fixtures:manual": "node scripts/manual-test-fixtures/run-fixtures.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:performance": "vitest run --config vitest.performance.config.ts",
@@ -19,6 +20,7 @@
   },
   "dependencies": {
     "bullmq": "^5.71.0",
+    "dotenv": "^17.3.1",
     "express": "^5.1.0",
     "ioredis": "^5.8.1",
     "pino": "^10.0.0",

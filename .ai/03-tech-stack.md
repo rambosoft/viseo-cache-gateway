@@ -18,6 +18,7 @@
 - Proposed: Logging uses Pino with structured JSON output in non-local environments.
 - Proposed: Outbound HTTP uses built-in `fetch` or Undici directly.
 - Proposed: Runtime validation uses Zod.
+- Confirmed: Local development environment loading may use `dotenv` through the config bootstrap, while production remains environment-variable driven.
 - Proposed: Build uses SWC for fast transpilation plus `tsc --noEmit` for type checking.
 - Proposed: Testing uses Jest or Vitest plus Supertest-compatible HTTP integration coverage. The implementation may choose one runner, but the docs assume feature-complete unit and integration testing regardless of runner.
 
@@ -30,5 +31,5 @@
 ## Operational Dependencies
 
 - Confirmed: Docker is required for local development and deployment packaging.
-- Confirmed: Docker Compose is acceptable for local and simple environment orchestration.
+- Confirmed: Docker Compose is the supported local orchestration path for Redis, fixture upstreams, server, and worker.
 - Proposed: PM2 or equivalent process supervision may be used for non-containerized production deployments, but container-first lifecycle management is preferred in docs.

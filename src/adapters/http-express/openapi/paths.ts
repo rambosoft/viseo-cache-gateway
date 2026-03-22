@@ -5,6 +5,7 @@ import {
   exampleCategoriesResponse,
   exampleHealthDegradedResponse,
   exampleHealthOkResponse,
+  exampleM3uFixtureItemId,
   exampleM3uItemDetail,
   exampleNotFoundError,
   examplePaginatedItemsPage,
@@ -336,9 +337,10 @@ export const openApiPaths = {
           name: "itemId",
           in: "path",
           required: true,
-          description: "Item identifier returned by list or search responses.",
+          description:
+            "Opaque gateway item identifier returned by list or search responses. Do not invent this value or substitute a source-native ID.",
           schema: { type: "string" },
-          example: "item_demo_1"
+          example: exampleM3uFixtureItemId
         }
       ],
       responses: {
