@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import express, { type NextFunction, type Request, type Response } from "express";
+import swaggerUi from "swagger-ui-express";
 import { z } from "zod";
 
 import { GetPlaylistItemDetailService } from "../../application/services/GetPlaylistItemDetailService";
@@ -14,6 +15,7 @@ import { asItemId, asPlaylistId } from "../../core/shared/brands";
 import { AppError, authenticationFailed, validationFailed } from "../../core/shared/errors";
 import type { LoggerPort } from "../../ports/platform/LoggerPort";
 import type { TelemetryPort } from "../../ports/platform/TelemetryPort";
+import { openApiDocument } from "./openapi";
 
 const paginationQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
@@ -66,6 +68,25 @@ export const createApp = (dependencies: {
 
     next();
   });
+
+  app.get("/openapi.json", (_req, res) => {
+    res.json(openApiDocument);
+  });
+
+  app.use(
+    "/docs",
+    swaggerUi.serve,
+    swaggerUi.setup(undefined, {
+      explorer: true,
+      customSiteTitle: "cache_gateway API Docs",
+      swaggerOptions: {
+        url: "/openapi.json",
+        displayRequestDuration: true,
+        persistAuthorization: true,
+        validatorUrl: null
+      }
+    })
+  );
 
   app.get("/health", async (_req, res, next) => {
     try {

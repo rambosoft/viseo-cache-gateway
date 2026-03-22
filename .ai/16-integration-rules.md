@@ -21,6 +21,13 @@
 - Confirmed: M3U adapters own playlist retrieval and minimal metadata extraction.
 - Proposed: Adapters return normalized internal models plus structured source-error information rather than raw upstream response objects.
 
+## API Documentation Rules
+
+- Confirmed: The canonical machine-readable API contract is the OpenAPI document served from `/openapi.json`.
+- Confirmed: Swagger UI at `/docs` must load `/openapi.json`, not a duplicated in-memory-only spec source.
+- Confirmed: API route changes must update both `22-api-contracts.md` and `src/adapters/http-express/openapi/`.
+- Confirmed: OpenAPI content is owned at the HTTP adapter edge and must not leak documentation concerns into core or application modules.
+
 ## Redis Rules
 
 - Proposed: Keys must be tenant-prefixed, schema-versioned, and revision-aware.

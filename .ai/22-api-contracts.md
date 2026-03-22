@@ -10,12 +10,21 @@
 
 ## Route Set
 
+- Confirmed: `GET /openapi.json`
+- Confirmed: `GET /docs`
 - Confirmed: `GET /api/auth/validate`
 - Confirmed: `GET /api/playlists/:playlistId/items`
 - Confirmed: `GET /api/playlists/:playlistId/search`
 - Confirmed: `GET /api/playlists/:playlistId/categories`
 - Confirmed: `GET /api/playlists/:playlistId/items/:itemId/detail`
 - Confirmed: `GET /health`
+
+## API Documentation
+
+- Confirmed: `GET /openapi.json` returns the canonical OpenAPI 3.1 document for the running server.
+- Confirmed: `GET /docs` serves Swagger UI backed by `/openapi.json`, not a separate duplicated spec object.
+- Confirmed: Documentation routes are unauthenticated and operational; they do not change API behavior or authorization rules.
+- Confirmed: The implementation source for the machine-readable contract lives under `src/adapters/http-express/openapi/`, split into document, paths, schemas, examples, and types.
 
 ## Auth Validation
 
@@ -26,13 +35,15 @@
 ## Playlist Items
 
 - Confirmed: `GET /api/playlists/:playlistId/items` supports playlist-scoped pagination.
-- Confirmed: Query parameters may include `page`, `pageSize`, `mediaType`, `category`, and `sort`.
+- Confirmed: Query parameters are `page` and `pageSize` in MVP.
+- Proposed: Filter and sort query parameters remain post-MVP extensions and are not canonical today.
 - Proposed: Response shape is `{ items, page, pageSize, total, hasMore }`.
 
 ## Playlist Search
 
 - Confirmed: `GET /api/playlists/:playlistId/search` supports full-text search within one playlist.
-- Confirmed: Query parameters may include `q`, `page`, `pageSize`, `mediaType`, `category`, and `sort`.
+- Confirmed: Query parameters are `q`, `page`, and `pageSize` in MVP.
+- Proposed: Filter and sort query parameters remain post-MVP extensions and are not canonical today.
 - Proposed: Response shape is `{ items, page, pageSize, total, hasMore, query }`.
 - Confirmed: MVP search is deterministic normalized-token matching, not fuzzy ranking by default.
 
@@ -57,4 +68,3 @@
 - Confirmed: No canonical global `/api/search` route.
 - Confirmed: No canonical global `/api/items/:itemId` route.
 - Confirmed: No MVP runtime debug-toggle admin API.
-

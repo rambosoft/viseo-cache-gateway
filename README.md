@@ -9,6 +9,7 @@ Implemented slices:
 - primary-server validation flow
 - M3U and Xtream ingestion through the same normalized revision pipeline
 - playlist-scoped items, search, categories, and detail routes
+- OpenAPI 3.1 document and Swagger UI for interactive API documentation
 - background revision rebuild queue with BullMQ-backed runtime adapters
 - readiness-aware health reporting, including queue, failed-job, and worker heartbeat status
 - structured request telemetry and env-gated event-loop profiling hooks
@@ -27,6 +28,7 @@ Behavior notes:
 - Xtream playlists ingest VOD, series, and live metadata into the same normalized catalog model as M3U.
 - Xtream detail requests fetch full source detail through the Xtream adapter; M3U detail remains intentionally limited.
 - `/health` reports dependency readiness for Redis, the playlist-revision queue, and worker heartbeat, and degrades when failed revision jobs accumulate.
+- `/openapi.json` serves the canonical OpenAPI 3.1 document and `/docs/` serves Swagger UI backed by that live document.
 - Corrupted cached auth payloads are treated as recoverable cache misses, not internal errors.
 - If the active revision is corrupted and a retained healthy prior revision exists, reads fall back to that revision instead of failing open.
 - Performance checks are kept opt-in through `npm run test:performance` so the default suite stays stable.

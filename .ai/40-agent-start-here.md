@@ -37,6 +37,7 @@
 ## Before Writing Code
 
 - Confirmed: Check the canonical route set in `22-api-contracts.md`.
+- Confirmed: If you change any public HTTP route or response shape, update `src/adapters/http-express/openapi/` and keep `/openapi.json` aligned with `22-api-contracts.md`.
 - Confirmed: Check tenant and revision rules in `04-architecture-overview.md` and `16-integration-rules.md`.
 - Confirmed: Check scope boundaries in `02-scope-mvp-vs-post-mvp.md`.
 - Proposed: If needed, consult `decision-register.md` and `source-map.md` before reading a historical source file.

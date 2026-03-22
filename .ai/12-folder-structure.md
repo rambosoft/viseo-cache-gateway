@@ -30,6 +30,7 @@ src/
     jobs/
   adapters/
     http-express/
+      openapi/
     cache-redis/
     queue-bullmq/
     source-primary-server/
@@ -52,6 +53,7 @@ src/
 - Confirmed: `application/` coordinates use cases and request-independent orchestration.
 - Confirmed: `adapters/` implements ports and owns framework or vendor-specific code.
 - Confirmed: `bootstrap/` wires the runtime graph and process lifecycle.
+- Confirmed: `adapters/http-express/openapi/` owns the OpenAPI document split by `document`, `paths`, `schemas`, `examples`, and `types`.
 - Proposed: Source-specific normalization helpers should stay close to their adapters, not in a global util bucket.
 
 ## Do Not Do
@@ -59,4 +61,3 @@ src/
 - Confirmed: Do not organize the project as controller-service-repository folders at the top level without core and port separation.
 - Confirmed: Do not place Redis key strings or route constants ad hoc across unrelated modules.
 - Confirmed: Do not mix tests into production folders when the separation would clarify ownership.
-
