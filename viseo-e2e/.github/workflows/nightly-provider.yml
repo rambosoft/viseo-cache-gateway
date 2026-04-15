@@ -1,0 +1,39 @@
+name: Nightly Provider
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *'
+
+jobs:
+  provider:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium
+
+      - name: Run provider suite
+        run: npm run test:nightly-provider
+        env:
+          FE_MODE: remote
+          FE_BASE_URL: ${{ vars.E2E_FRONTEND_URL }}
+          BE_MODE: image
+          BE_IMAGE: ${{ vars.E2E_BACKEND_IMAGE }}
+          E2E_SEED_TOKEN: ${{ secrets.E2E_SEED_TOKEN }}
+          PROVIDER_MODE: real
+          MAIL_MODE: sink
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-provider-artifacts
+          path: artifacts/

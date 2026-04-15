@@ -1,0 +1,39 @@
+name: PR Smoke
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium
+
+      - run: npm run typecheck
+
+      - name: Run smoke suite
+        run: npm run test:smoke
+        env:
+          FE_MODE: remote
+          FE_BASE_URL: ${{ vars.E2E_FRONTEND_URL }}
+          BE_MODE: image
+          BE_IMAGE: ${{ vars.E2E_BACKEND_IMAGE }}
+          E2E_SEED_TOKEN: ${{ secrets.E2E_SEED_TOKEN }}
+          PROVIDER_MODE: simulated
+          MAIL_MODE: sink
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr-smoke-artifacts
+          path: artifacts/

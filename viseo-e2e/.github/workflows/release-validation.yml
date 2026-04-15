@@ -1,0 +1,43 @@
+name: Release Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      fe_base_url:
+        description: Hosted frontend URL
+        required: true
+      be_image:
+        description: Backend image tag
+        required: true
+
+jobs:
+  release-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium
+
+      - name: Run release validation suite
+        run: npm run test:release-validation
+        env:
+          FE_MODE: remote
+          FE_BASE_URL: ${{ inputs.fe_base_url }}
+          BE_MODE: image
+          BE_IMAGE: ${{ inputs.be_image }}
+          E2E_SEED_TOKEN: ${{ secrets.E2E_SEED_TOKEN }}
+          PROVIDER_MODE: simulated
+          MAIL_MODE: sink
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-validation-artifacts
+          path: artifacts/

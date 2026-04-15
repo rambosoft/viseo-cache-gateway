@@ -1,0 +1,27 @@
+{
+  "name": "viseo-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone end-to-end workflow platform for luxus-service and viseo-panel.",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "playwright test --project=chromium",
+    "test:headed": "playwright test --project=chromium-debug",
+    "test:smoke": "tsx scripts/run-suite.ts smoke",
+    "test:core": "tsx scripts/run-suite.ts core",
+    "test:lifecycle": "tsx scripts/run-suite.ts lifecycle",
+    "test:nightly-provider": "tsx scripts/run-suite.ts nightly-provider",
+    "test:release-validation": "tsx scripts/run-suite.ts release-validation",
+    "test:scenario": "tsx scripts/run-suite.ts single",
+    "compose:config": "tsx scripts/compose.ts config",
+    "artifacts:clean": "tsx scripts/clean-artifacts.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^22.10.2",
+    "dotenv": "^16.4.7",
+    "tsx": "^4.20.6",
+    "typescript": "^5.7.3",
+    "zod": "^3.24.1"
+  }
+}
