@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build and tool output
+.turbo/
+dist/
+build/
+coverage/
+playwright-report/
+test-results/
+.next/
+.open-next/
+.wrangler/
+
+# Environment and local overrides
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs and editor/OS files
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json

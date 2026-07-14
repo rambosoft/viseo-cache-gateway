@@ -1,0 +1,31 @@
+{
+  "name": "vela-immo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Moroccan property agency platform modular monolith",
+  "engines": {
+    "node": "24.18.0",
+    "pnpm": "11.13.0"
+  },
+  "packageManager": "pnpm@11.13.0",
+  "scripts": {
+    "dev": "node tools/require-scaffold.mjs dev",
+    "build": "node tools/require-scaffold.mjs build",
+    "lint": "eslint .",
+    "typecheck": "turbo run typecheck",
+    "test": "pnpm run test:unit",
+    "test:unit": "vitest run",
+    "test:e2e": "node tools/require-scaffold.mjs test:e2e",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "clean": "node tools/clean.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.7.0",
+    "prettier": "3.9.5",
+    "turbo": "2.10.5",
+    "typescript": "7.0.2",
+    "vitest": "4.1.10"
+  }
+}
